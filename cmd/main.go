@@ -16,7 +16,7 @@ func main() {
 	// Middleware
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
-	
+
 	// Set custom error handler
 	e.HTTPErrorHandler = customHTTPErrorHandler
 
@@ -35,7 +35,7 @@ func main() {
 	e.GET("/api/v1/products", handlers.NewListProductsHandler(queries))
 
 	// Start server
-	e.Logger.Fatal(e.Start(":8080"))
+	e.Logger.Fatal(e.Start(":5582"))
 }
 
 // Custom HTTP error handler

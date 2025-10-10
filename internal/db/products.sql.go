@@ -130,3 +130,102 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 	}
 	return items, nil
 }
+
+const searchProducts = `-- name: SearchProducts :many
+SELECT id, name, brand, dosage_form_id, strength, unit, category_id, description, created_at FROM products
+WHERE 
+    name ILIKE '%' || $1 || '%' 
+    OR brand ILIKE '%' || $1 || '%'
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type SearchProductsParams struct {
+	Column1 sql.NullString
+	Limit   int32
+	Offset  int32
+}
+
+func (q *Queries) SearchProducts(ctx context.Context, arg SearchProductsParams) ([]Product, error) {
+	rows, err := q.db.QueryContext(ctx, searchProducts, arg.Column1, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Product
+	for rows.Next() {
+		var i Product
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Brand,
+			&i.DosageFormID,
+			&i.Strength,
+			&i.Unit,
+			&i.CategoryID,
+			&i.Description,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateProduct = `-- name: UpdateProduct :one
+UPDATE products
+SET 
+    name = COALESCE($2, name),
+    brand = COALESCE($3, brand),
+    dosage_form_id = COALESCE($4, dosage_form_id),
+    strength = COALESCE($5, strength),
+    unit = COALESCE($6, unit),
+    category_id = COALESCE($7, category_id),
+    description = COALESCE($8, description)
+WHERE id = $1
+RETURNING id, name, brand, dosage_form_id, strength, unit, category_id, description, created_at
+`
+
+type UpdateProductParams struct {
+	ID           uuid.UUID
+	Name         string
+	Brand        sql.NullString
+	DosageFormID sql.NullInt32
+	Strength     sql.NullString
+	Unit         sql.NullString
+	CategoryID   sql.NullInt32
+	Description  sql.NullString
+}
+
+func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error) {
+	row := q.db.QueryRowContext(ctx, updateProduct,
+		arg.ID,
+		arg.Name,
+		arg.Brand,
+		arg.DosageFormID,
+		arg.Strength,
+		arg.Unit,
+		arg.CategoryID,
+		arg.Description,
+	)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Brand,
+		&i.DosageFormID,
+		&i.Strength,
+		&i.Unit,
+		&i.CategoryID,
+		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
+}
