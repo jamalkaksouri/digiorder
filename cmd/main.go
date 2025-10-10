@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/jamalkaksouri/DigiOrder/internal/db"
@@ -15,12 +16,34 @@ func main() {
 	// Middleware
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
-    // ست کردن error handler پیشفرض
-e.HTTPErrorHandler = func(err error, c echo.Context) {
+	
+	// Set custom error handler
+	e.HTTPErrorHandler = customHTTPErrorHandler
+
+	// Database connection
+	database, err := db.Connect()
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+	defer database.Close()
+
+	// Initialize queries
+	queries := db.New(database)
+
+	// Routes
+	e.POST("/api/v1/products", handlers.NewCreateProductHandler(database, queries))
+	e.GET("/api/v1/products", handlers.NewListProductsHandler(queries))
+
+	// Start server
+	e.Logger.Fatal(e.Start(":8080"))
+}
+
+// Custom HTTP error handler
+func customHTTPErrorHandler(err error, c echo.Context) {
 	code := http.StatusInternalServerError
 	msg := "internal_server_error"
 
-	// بررسی نوع خطا
+	// Check error type
 	if he, ok := err.(*echo.HTTPError); ok {
 		code = he.Code
 		if m, ok := he.Message.(string); ok {
@@ -30,21 +53,11 @@ e.HTTPErrorHandler = func(err error, c echo.Context) {
 		}
 	}
 
-	// جواب استاندارد JSON
+	// Standard JSON response
 	if !c.Response().Committed {
-		c.JSON(code, ErrorResponse{
+		c.JSON(code, handlers.ErrorResponse{
 			Error:   msg,
 			Details: err.Error(),
 		})
 	}
-}
-
-
-	database := db.Connect()
-	defer database.Close()
-
-	e.POST("/api/v1/products", handlers.NewCreateProductHandler(database, queries))
-	e.GET("/api/v1/products", handlers.NewListProductsHandler(queries))
-
-	e.Logger.Fatal(e.Start(":8080"))
 }
