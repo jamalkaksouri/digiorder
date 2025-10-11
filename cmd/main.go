@@ -34,6 +34,18 @@ func main() {
 	e.POST("/api/v1/products", handlers.NewCreateProductHandler(database, queries))
 	e.GET("/api/v1/products", handlers.NewListProductsHandler(queries))
 
+	// --- ADD THESE NEW ROUTES FOR CATEGORIES ---
+	e.POST("/api/v1/categories", handlers.NewCreateCategoryHandler(queries))
+	e.GET("/api/v1/categories", handlers.NewListCategoriesHandler(queries))
+	e.GET("/api/v1/categories/:id", handlers.NewGetCategoryHandler(queries))
+	// -----------------------------------------
+
+	// --- ADD THESE NEW ROUTES FOR DOSAGE FORMS ---
+	e.POST("/api/v1/dosage_forms", handlers.NewCreateDosageFormHandler(queries))
+	e.GET("/api/v1/dosage_forms", handlers.NewListDosageFormsHandler(queries))
+	e.GET("/api/v1/dosage_forms/:id", handlers.NewGetDosageFormHandler(queries))
+	// -------------------------------------------
+
 	// Start server
 	e.Logger.Fatal(e.Start(":5582"))
 }
