@@ -3,7 +3,7 @@ package server
 import (
 	"net/http"
 
-	"github.com/jamalkaksouri/DigiOrder/internal/handlers"
+	// "github.com/jamalkaksouri/DigiOrder/internal/server"
 	"github.com/labstack/echo/v4/middleware"
 )
 
