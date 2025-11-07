@@ -35,6 +35,28 @@ func (q *Queries) CreateDosageForm(ctx context.Context, name string) (DosageForm
 	return i, err
 }
 
+const createRole = `-- name: CreateRole :one
+INSERT INTO roles (name) 
+VALUES ($1)
+RETURNING id, name
+`
+
+func (q *Queries) CreateRole(ctx context.Context, name string) (Role, error) {
+	row := q.db.QueryRowContext(ctx, createRole, name)
+	var i Role
+	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
+const deleteRole = `-- name: DeleteRole :exec
+DELETE FROM roles WHERE id = $1
+`
+
+func (q *Queries) DeleteRole(ctx context.Context, id int32) error {
+	_, err := q.db.ExecContext(ctx, deleteRole, id)
+	return err
+}
+
 const getCategory = `-- name: GetCategory :one
 SELECT id, name FROM categories
 WHERE id = $1 LIMIT 1
@@ -153,4 +175,23 @@ func (q *Queries) ListRoles(ctx context.Context) ([]Role, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateRole = `-- name: UpdateRole :one
+UPDATE roles
+SET name = $2
+WHERE id = $1
+RETURNING id, name
+`
+
+type UpdateRoleParams struct {
+	ID   int32
+	Name string
+}
+
+func (q *Queries) UpdateRole(ctx context.Context, arg UpdateRoleParams) (Role, error) {
+	row := q.db.QueryRowContext(ctx, updateRole, arg.ID, arg.Name)
+	var i Role
+	err := row.Scan(&i.ID, &i.Name)
+	return i, err
 }

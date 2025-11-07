@@ -10,22 +10,22 @@ import (
 
 // Server holds the dependencies for our application.
 type Server struct {
-	db       *sql.DB
-	queries  *db.Queries
-	router   *echo.Echo
+	db        *sql.DB
+	queries   *db.Queries
+	router    *echo.Echo
 	validator *validator.Validate
 }
 
 // New creates a new Server instance with all its dependencies.
-func New(db *sql.DB) *Server {
+func New(database *sql.DB) *Server {
 	e := echo.New()
 	
 	// Create a new validator instance
 	v := validator.New()
 
 	server := &Server{
-		db:        db,
-		queries:   db.New(db),
+		db:        database,
+		queries:   db.New(database),
 		router:    e,
 		validator: v,
 	}
