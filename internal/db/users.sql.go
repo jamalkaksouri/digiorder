@@ -18,7 +18,7 @@ INSERT INTO users (
 ) VALUES (
     $1, $2, $3, $4
 )
-RETURNING id, username, full_name, password_hash, role_id, created_at
+RETURNING id, username, full_name, password_hash, role_id, created_at, deleted_at
 `
 
 type CreateUserParams struct {
@@ -43,6 +43,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.PasswordHash,
 		&i.RoleID,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -57,7 +58,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, username, full_name, password_hash, role_id, created_at FROM users
+SELECT id, username, full_name, password_hash, role_id, created_at, deleted_at FROM users
 WHERE id = $1 LIMIT 1
 `
 
@@ -71,12 +72,13 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.PasswordHash,
 		&i.RoleID,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, full_name, password_hash, role_id, created_at FROM users
+SELECT id, username, full_name, password_hash, role_id, created_at, deleted_at FROM users
 WHERE username = $1 LIMIT 1
 `
 
@@ -90,12 +92,13 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.PasswordHash,
 		&i.RoleID,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, username, full_name, password_hash, role_id, created_at FROM users
+SELECT id, username, full_name, password_hash, role_id, created_at, deleted_at FROM users
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -121,6 +124,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 			&i.PasswordHash,
 			&i.RoleID,
 			&i.CreatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -141,7 +145,7 @@ SET
     full_name = COALESCE($2, full_name),
     role_id = COALESCE($3, role_id)
 WHERE id = $1
-RETURNING id, username, full_name, password_hash, role_id, created_at
+RETURNING id, username, full_name, password_hash, role_id, created_at, deleted_at
 `
 
 type UpdateUserParams struct {
@@ -160,6 +164,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.PasswordHash,
 		&i.RoleID,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }

@@ -6,9 +6,33 @@ package db
 
 import (
 	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 )
+
+type ApiRateLimit struct {
+	ID            uuid.UUID
+	ClientID      string
+	Endpoint      string
+	RequestsCount int32
+	WindowStart   time.Time
+	CreatedAt     sql.NullTime
+}
+
+type AuditLog struct {
+	ID         uuid.UUID
+	UserID     uuid.NullUUID
+	Action     string
+	EntityType string
+	EntityID   string
+	OldValues  pqtype.NullRawMessage
+	NewValues  pqtype.NullRawMessage
+	IpAddress  sql.NullString
+	UserAgent  sql.NullString
+	CreatedAt  sql.NullTime
+}
 
 type Category struct {
 	ID   int32
@@ -27,6 +51,7 @@ type Order struct {
 	CreatedAt   sql.NullTime
 	SubmittedAt sql.NullTime
 	Notes       sql.NullString
+	DeletedAt   sql.NullTime
 }
 
 type OrderItem struct {
@@ -48,6 +73,7 @@ type Product struct {
 	CategoryID   sql.NullInt32
 	Description  sql.NullString
 	CreatedAt    sql.NullTime
+	DeletedAt    sql.NullTime
 }
 
 type ProductBarcode struct {
@@ -55,6 +81,7 @@ type ProductBarcode struct {
 	ProductID   uuid.NullUUID
 	Barcode     string
 	BarcodeType sql.NullString
+	CreatedAt   sql.NullTime
 }
 
 type Role struct {
@@ -69,4 +96,5 @@ type User struct {
 	PasswordHash string
 	RoleID       sql.NullInt32
 	CreatedAt    sql.NullTime
+	DeletedAt    sql.NullTime
 }

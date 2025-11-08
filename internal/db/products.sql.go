@@ -18,7 +18,7 @@ INSERT INTO products (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7
 )
-RETURNING id, name, brand, dosage_form_id, strength, unit, category_id, description, created_at
+RETURNING id, name, brand, dosage_form_id, strength, unit, category_id, description, created_at, deleted_at
 `
 
 type CreateProductParams struct {
@@ -52,6 +52,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		&i.CategoryID,
 		&i.Description,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -66,7 +67,7 @@ func (q *Queries) DeleteProduct(ctx context.Context, id uuid.UUID) error {
 }
 
 const getProduct = `-- name: GetProduct :one
-SELECT id, name, brand, dosage_form_id, strength, unit, category_id, description, created_at FROM products
+SELECT id, name, brand, dosage_form_id, strength, unit, category_id, description, created_at, deleted_at FROM products
 WHERE id = $1 LIMIT 1
 `
 
@@ -83,12 +84,13 @@ func (q *Queries) GetProduct(ctx context.Context, id uuid.UUID) (Product, error)
 		&i.CategoryID,
 		&i.Description,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const listProducts = `-- name: ListProducts :many
-SELECT id, name, brand, dosage_form_id, strength, unit, category_id, description, created_at FROM products
+SELECT id, name, brand, dosage_form_id, strength, unit, category_id, description, created_at, deleted_at FROM products
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -117,6 +119,7 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 			&i.CategoryID,
 			&i.Description,
 			&i.CreatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -132,7 +135,7 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 }
 
 const searchProducts = `-- name: SearchProducts :many
-SELECT id, name, brand, dosage_form_id, strength, unit, category_id, description, created_at FROM products
+SELECT id, name, brand, dosage_form_id, strength, unit, category_id, description, created_at, deleted_at FROM products
 WHERE 
     name ILIKE '%' || $1 || '%' 
     OR brand ILIKE '%' || $1 || '%'
@@ -165,6 +168,7 @@ func (q *Queries) SearchProducts(ctx context.Context, arg SearchProductsParams) 
 			&i.CategoryID,
 			&i.Description,
 			&i.CreatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -190,7 +194,7 @@ SET
     category_id = COALESCE($7, category_id),
     description = COALESCE($8, description)
 WHERE id = $1
-RETURNING id, name, brand, dosage_form_id, strength, unit, category_id, description, created_at
+RETURNING id, name, brand, dosage_form_id, strength, unit, category_id, description, created_at, deleted_at
 `
 
 type UpdateProductParams struct {
@@ -226,6 +230,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		&i.CategoryID,
 		&i.Description,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }

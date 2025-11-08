@@ -18,7 +18,7 @@ INSERT INTO orders (
 ) VALUES (
     $1, $2, $3
 )
-RETURNING id, created_by, status, created_at, submitted_at, notes
+RETURNING id, created_by, status, created_at, submitted_at, notes, deleted_at
 `
 
 type CreateOrderParams struct {
@@ -37,6 +37,7 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 		&i.CreatedAt,
 		&i.SubmittedAt,
 		&i.Notes,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -97,7 +98,7 @@ func (q *Queries) DeleteOrderItem(ctx context.Context, id uuid.UUID) error {
 }
 
 const getOrder = `-- name: GetOrder :one
-SELECT id, created_by, status, created_at, submitted_at, notes FROM orders
+SELECT id, created_by, status, created_at, submitted_at, notes, deleted_at FROM orders
 WHERE id = $1 LIMIT 1
 `
 
@@ -111,6 +112,7 @@ func (q *Queries) GetOrder(ctx context.Context, id uuid.UUID) (Order, error) {
 		&i.CreatedAt,
 		&i.SubmittedAt,
 		&i.Notes,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -152,7 +154,7 @@ func (q *Queries) GetOrderItems(ctx context.Context, orderID uuid.NullUUID) ([]O
 }
 
 const listOrders = `-- name: ListOrders :many
-SELECT id, created_by, status, created_at, submitted_at, notes FROM orders
+SELECT id, created_by, status, created_at, submitted_at, notes, deleted_at FROM orders
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -178,6 +180,7 @@ func (q *Queries) ListOrders(ctx context.Context, arg ListOrdersParams) ([]Order
 			&i.CreatedAt,
 			&i.SubmittedAt,
 			&i.Notes,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -193,7 +196,7 @@ func (q *Queries) ListOrders(ctx context.Context, arg ListOrdersParams) ([]Order
 }
 
 const listOrdersByUser = `-- name: ListOrdersByUser :many
-SELECT id, created_by, status, created_at, submitted_at, notes FROM orders
+SELECT id, created_by, status, created_at, submitted_at, notes, deleted_at FROM orders
 WHERE created_by = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -221,6 +224,7 @@ func (q *Queries) ListOrdersByUser(ctx context.Context, arg ListOrdersByUserPara
 			&i.CreatedAt,
 			&i.SubmittedAt,
 			&i.Notes,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -277,7 +281,7 @@ SET
     status = $2,
     submitted_at = CASE WHEN $2 = 'submitted' THEN NOW() ELSE submitted_at END
 WHERE id = $1
-RETURNING id, created_by, status, created_at, submitted_at, notes
+RETURNING id, created_by, status, created_at, submitted_at, notes, deleted_at
 `
 
 type UpdateOrderStatusParams struct {
@@ -295,6 +299,7 @@ func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusPa
 		&i.CreatedAt,
 		&i.SubmittedAt,
 		&i.Notes,
+		&i.DeletedAt,
 	)
 	return i, err
 }

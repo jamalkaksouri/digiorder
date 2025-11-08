@@ -12,49 +12,69 @@ import (
 	"github.com/google/uuid"
 )
 
-const createProductBarcode = `-- name: CreateProductBarcode :one
+const createBarcode = `-- name: CreateBarcode :one
 INSERT INTO product_barcodes (
     product_id, barcode, barcode_type
 ) VALUES (
     $1, $2, $3
 )
-RETURNING id, product_id, barcode, barcode_type
+RETURNING id, product_id, barcode, barcode_type, created_at
 `
 
-type CreateProductBarcodeParams struct {
+type CreateBarcodeParams struct {
 	ProductID   uuid.NullUUID
 	Barcode     string
 	BarcodeType sql.NullString
 }
 
-func (q *Queries) CreateProductBarcode(ctx context.Context, arg CreateProductBarcodeParams) (ProductBarcode, error) {
-	row := q.db.QueryRowContext(ctx, createProductBarcode, arg.ProductID, arg.Barcode, arg.BarcodeType)
+func (q *Queries) CreateBarcode(ctx context.Context, arg CreateBarcodeParams) (ProductBarcode, error) {
+	row := q.db.QueryRowContext(ctx, createBarcode, arg.ProductID, arg.Barcode, arg.BarcodeType)
 	var i ProductBarcode
 	err := row.Scan(
 		&i.ID,
 		&i.ProductID,
 		&i.Barcode,
 		&i.BarcodeType,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
-const deleteProductBarcode = `-- name: DeleteProductBarcode :exec
+const deleteBarcode = `-- name: DeleteBarcode :exec
 DELETE FROM product_barcodes WHERE id = $1
 `
 
-func (q *Queries) DeleteProductBarcode(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, deleteProductBarcode, id)
+func (q *Queries) DeleteBarcode(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteBarcode, id)
 	return err
 }
 
-const getProductBarcodes = `-- name: GetProductBarcodes :many
-SELECT id, product_id, barcode, barcode_type FROM product_barcodes
-WHERE product_id = $1
+const getBarcode = `-- name: GetBarcode :one
+SELECT id, product_id, barcode, barcode_type, created_at FROM product_barcodes
+WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) GetProductBarcodes(ctx context.Context, productID uuid.NullUUID) ([]ProductBarcode, error) {
-	rows, err := q.db.QueryContext(ctx, getProductBarcodes, productID)
+func (q *Queries) GetBarcode(ctx context.Context, id uuid.UUID) (ProductBarcode, error) {
+	row := q.db.QueryRowContext(ctx, getBarcode, id)
+	var i ProductBarcode
+	err := row.Scan(
+		&i.ID,
+		&i.ProductID,
+		&i.Barcode,
+		&i.BarcodeType,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getBarcodesByProduct = `-- name: GetBarcodesByProduct :many
+SELECT id, product_id, barcode, barcode_type, created_at FROM product_barcodes
+WHERE product_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) GetBarcodesByProduct(ctx context.Context, productID uuid.NullUUID) ([]ProductBarcode, error) {
+	rows, err := q.db.QueryContext(ctx, getBarcodesByProduct, productID)
 	if err != nil {
 		return nil, err
 	}
@@ -67,6 +87,7 @@ func (q *Queries) GetProductBarcodes(ctx context.Context, productID uuid.NullUUI
 			&i.ProductID,
 			&i.Barcode,
 			&i.BarcodeType,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -82,9 +103,10 @@ func (q *Queries) GetProductBarcodes(ctx context.Context, productID uuid.NullUUI
 }
 
 const getProductByBarcode = `-- name: GetProductByBarcode :one
-SELECT p.id, p.name, p.brand, p.dosage_form_id, p.strength, p.unit, p.category_id, p.description, p.created_at FROM products p
-JOIN product_barcodes pb ON p.id = pb.product_id
-WHERE pb.barcode = $1 LIMIT 1
+SELECT p.id, p.name, p.brand, p.dosage_form_id, p.strength, p.unit, p.category_id, p.description, p.created_at, p.deleted_at FROM products p
+INNER JOIN product_barcodes pb ON p.id = pb.product_id
+WHERE pb.barcode = $1
+LIMIT 1
 `
 
 func (q *Queries) GetProductByBarcode(ctx context.Context, barcode string) (Product, error) {
@@ -100,42 +122,38 @@ func (q *Queries) GetProductByBarcode(ctx context.Context, barcode string) (Prod
 		&i.CategoryID,
 		&i.Description,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
-const searchProductsByBarcode = `-- name: SearchProductsByBarcode :many
-SELECT p.id, p.name, p.brand, p.dosage_form_id, p.strength, p.unit, p.category_id, p.description, p.created_at FROM products p
-JOIN product_barcodes pb ON p.id = pb.product_id
-WHERE pb.barcode ILIKE '%' || $1 || '%'
-ORDER BY p.created_at DESC
+const searchBarcodes = `-- name: SearchBarcodes :many
+SELECT id, product_id, barcode, barcode_type, created_at FROM product_barcodes
+WHERE barcode ILIKE '%' || $1 || '%'
+ORDER BY barcode
 LIMIT $2 OFFSET $3
 `
 
-type SearchProductsByBarcodeParams struct {
+type SearchBarcodesParams struct {
 	Column1 sql.NullString
 	Limit   int32
 	Offset  int32
 }
 
-func (q *Queries) SearchProductsByBarcode(ctx context.Context, arg SearchProductsByBarcodeParams) ([]Product, error) {
-	rows, err := q.db.QueryContext(ctx, searchProductsByBarcode, arg.Column1, arg.Limit, arg.Offset)
+func (q *Queries) SearchBarcodes(ctx context.Context, arg SearchBarcodesParams) ([]ProductBarcode, error) {
+	rows, err := q.db.QueryContext(ctx, searchBarcodes, arg.Column1, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Product
+	var items []ProductBarcode
 	for rows.Next() {
-		var i Product
+		var i ProductBarcode
 		if err := rows.Scan(
 			&i.ID,
-			&i.Name,
-			&i.Brand,
-			&i.DosageFormID,
-			&i.Strength,
-			&i.Unit,
-			&i.CategoryID,
-			&i.Description,
+			&i.ProductID,
+			&i.Barcode,
+			&i.BarcodeType,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -149,4 +167,32 @@ func (q *Queries) SearchProductsByBarcode(ctx context.Context, arg SearchProduct
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateBarcode = `-- name: UpdateBarcode :one
+UPDATE product_barcodes
+SET 
+    barcode = COALESCE($2, barcode),
+    barcode_type = COALESCE($3, barcode_type)
+WHERE id = $1
+RETURNING id, product_id, barcode, barcode_type, created_at
+`
+
+type UpdateBarcodeParams struct {
+	ID          uuid.UUID
+	Barcode     string
+	BarcodeType sql.NullString
+}
+
+func (q *Queries) UpdateBarcode(ctx context.Context, arg UpdateBarcodeParams) (ProductBarcode, error) {
+	row := q.db.QueryRowContext(ctx, updateBarcode, arg.ID, arg.Barcode, arg.BarcodeType)
+	var i ProductBarcode
+	err := row.Scan(
+		&i.ID,
+		&i.ProductID,
+		&i.Barcode,
+		&i.BarcodeType,
+		&i.CreatedAt,
+	)
+	return i, err
 }
