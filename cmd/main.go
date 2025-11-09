@@ -5,6 +5,7 @@ import (
 
 	"github.com/jamalkaksouri/DigiOrder/internal/db"
 	"github.com/jamalkaksouri/DigiOrder/internal/server" // Import the new server package
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {

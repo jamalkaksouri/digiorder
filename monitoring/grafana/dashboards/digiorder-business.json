@@ -1,0 +1,70 @@
+{
+  "dashboard": {
+    "title": "DigiOrder - Business Metrics",
+    "tags": ["digiorder", "business"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Orders Created Today",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(increase(orders_created_total[24h]))",
+            "legendFormat": "Orders"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
+      },
+      {
+        "id": 2,
+        "title": "Products Created Today",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(increase(products_created_total[24h]))",
+            "legendFormat": "Products"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 }
+      },
+      {
+        "id": 3,
+        "title": "Active Users",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "users_active_total",
+            "legendFormat": "Users"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 }
+      },
+      {
+        "id": 4,
+        "title": "Orders by Status",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum(orders_created_total) by (status)",
+            "legendFormat": "{{status}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 }
+      },
+      {
+        "id": 5,
+        "title": "Order Creation Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(orders_created_total[5m])",
+            "legendFormat": "Orders/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 }
+      }
+    ]
+  }
+}

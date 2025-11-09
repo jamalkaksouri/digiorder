@@ -63,6 +63,15 @@ type OrderItem struct {
 	Note         sql.NullString
 }
 
+type Permission struct {
+	ID          int32
+	Name        string
+	Resource    string
+	Action      string
+	Description sql.NullString
+	CreatedAt   sql.NullTime
+}
+
 type Product struct {
 	ID           uuid.UUID
 	Name         string
@@ -87,6 +96,13 @@ type ProductBarcode struct {
 type Role struct {
 	ID   int32
 	Name string
+}
+
+type RolePermission struct {
+	ID           int32
+	RoleID       int32
+	PermissionID int32
+	CreatedAt    sql.NullTime
 }
 
 type User struct {

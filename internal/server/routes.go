@@ -7,6 +7,7 @@ import (
 	"github.com/jamalkaksouri/DigiOrder/internal/middleware"
 	"github.com/labstack/echo/v4"
 	echomiddleware "github.com/labstack/echo/v4/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func (s *Server) registerRoutes() {
@@ -143,7 +144,45 @@ func (s *Server) registerRoutes() {
 		roles.PUT("/:id", s.UpdateRole)
 		roles.DELETE("/:id", s.DeleteRole)
 	}
+
+	// Permission routes (admin only)
+permissions := protected.Group("/permissions")
+permissions.Use(middleware.RequireRole("admin"))
+{
+    permissions.POST("", s.CreatePermission)
+    permissions.GET("", s.ListPermissions)
+    permissions.GET("/:id", s.GetPermission)
+    permissions.PUT("/:id", s.UpdatePermission)
+    permissions.DELETE("/:id", s.DeletePermission)
 }
+
+// Role permission management
+{
+    protected.POST("/roles/:role_id/permissions", s.AssignPermissionToRole, middleware.RequireRole("admin"))
+    protected.GET("/roles/:role_id/permissions", s.GetRolePermissions)
+    protected.DELETE("/roles/:role_id/permissions/:permission_id", s.RevokePermissionFromRole, middleware.RequireRole("admin"))
+}
+
+// Audit log routes (admin only)
+auditLogs := protected.Group("/audit-logs")
+auditLogs.Use(middleware.RequireRole("admin"))
+{
+    auditLogs.GET("", s.GetAuditLogs)
+    auditLogs.GET("/:id", s.GetAuditLog)
+    auditLogs.GET("/entity/:type/:id", s.GetEntityHistory)
+    auditLogs.GET("/stats", s.GetAuditStats)
+}
+
+// User activity
+protected.GET("/users/:user_id/activity", s.GetUserActivity, middleware.RequireRole("admin"))
+
+// Permission check
+protected.GET("/auth/check-permission", s.CheckUserPermission)
+
+// Prometheus metrics
+s.router.GET("/metrics", echo.WrapHandler(promhttp.Handler()))
+}
+
 
 // Health check endpoint
 func (s *Server) healthCheck(c echo.Context) error {

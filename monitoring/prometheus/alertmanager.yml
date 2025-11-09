@@ -1,0 +1,74 @@
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: "smtp.gmail.com:587"
+  smtp_from: "alerts@digiorder.com"
+  smtp_auth_username: "your-email@gmail.com"
+  smtp_auth_password: "your-app-password"
+
+# Templates for notifications
+templates:
+  - "/etc/alertmanager/templates/*.tmpl"
+
+# Routing tree
+route:
+  group_by: ["alertname", "cluster", "service"]
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: "team-notifications"
+
+  routes:
+    - match:
+        severity: critical
+      receiver: "critical-alerts"
+      continue: true
+
+    - match:
+        severity: warning
+      receiver: "warning-alerts"
+
+# Notification receivers
+receivers:
+  - name: "team-notifications"
+    email_configs:
+      - to: "team@digiorder.com"
+        headers:
+          Subject: "[DigiOrder] Alert: {{ .GroupLabels.alertname }}"
+        html: |
+          <!DOCTYPE html>
+          <html>
+          <body>
+            <h2>Alert: {{ .GroupLabels.alertname }}</h2>
+            <p><strong>Severity:</strong> {{ .CommonLabels.severity }}</p>
+            <p><strong>Summary:</strong> {{ .CommonAnnotations.summary }}</p>
+            <p><strong>Description:</strong> {{ .CommonAnnotations.description }}</p>
+            <p><strong>Time:</strong> {{ .StartsAt }}</p>
+          </body>
+          </html>
+
+  - name: "critical-alerts"
+    email_configs:
+      - to: "oncall@digiorder.com"
+        headers:
+          Subject: "[CRITICAL] DigiOrder Alert: {{ .GroupLabels.alertname }}"
+    # Add Slack webhook for critical alerts
+    slack_configs:
+      - api_url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+        channel: "#critical-alerts"
+        title: "Critical Alert: {{ .GroupLabels.alertname }}"
+        text: "{{ .CommonAnnotations.description }}"
+        color: "danger"
+
+  - name: "warning-alerts"
+    email_configs:
+      - to: "team@digiorder.com"
+        headers:
+          Subject: "[WARNING] DigiOrder: {{ .GroupLabels.alertname }}"
+
+# Inhibition rules (suppress certain alerts when others are firing)
+inhibit_rules:
+  - source_match:
+      severity: "critical"
+    target_match:
+      severity: "warning"
+    equal: ["alertname", "cluster", "service"]
