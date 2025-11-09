@@ -1,6 +1,8 @@
+// internal/middleware/auth.go - FIXED VERSION
 package middleware
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -20,11 +22,14 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
-// GetJWTSecret retrieves the JWT secret from environment
+// GetJWTSecret retrieves the JWT secret from environment - FIXED
 func GetJWTSecret() string {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		secret = "your_secret_key_here" // Fallback for development
+		log.Fatal("JWT_SECRET environment variable is required")
+	}
+	if len(secret) < 32 {
+		log.Fatal("JWT_SECRET must be at least 32 characters")
 	}
 	return secret
 }
@@ -33,10 +38,11 @@ func GetJWTSecret() string {
 func GetJWTExpiry() time.Duration {
 	expiry := os.Getenv("JWT_EXPIRY")
 	if expiry == "" {
-		expiry = "24h" // Default 24 hours
+		expiry = "24h"
 	}
 	duration, err := time.ParseDuration(expiry)
 	if err != nil {
+		log.Printf("Invalid JWT_EXPIRY format, using default 24h: %v", err)
 		return 24 * time.Hour
 	}
 	return duration
@@ -53,6 +59,7 @@ func GenerateToken(userID uuid.UUID, username string, roleID int32, roleName str
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(GetJWTExpiry())),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
+			Issuer:    "digiorder-api",
 		},
 	}
 
@@ -63,6 +70,10 @@ func GenerateToken(userID uuid.UUID, username string, roleID int32, roleName str
 // ValidateToken validates and parses a JWT token
 func ValidateToken(tokenString string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
+		// Verify signing method
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
 		return []byte(GetJWTSecret()), nil
 	})
 
@@ -71,6 +82,10 @@ func ValidateToken(tokenString string) (*JWTClaims, error) {
 	}
 
 	if claims, ok := token.Claims.(*JWTClaims); ok && token.Valid {
+		// Additional validation
+		if time.Now().After(claims.ExpiresAt.Time) {
+			return nil, jwt.ErrTokenExpired
+		}
 		return claims, nil
 	}
 
@@ -94,10 +109,16 @@ func JWTMiddleware() echo.MiddlewareFunc {
 			}
 
 			tokenString := parts[1]
+			if tokenString == "" {
+				return echo.NewHTTPError(http.StatusUnauthorized, "empty token")
+			}
 
 			// Validate token
 			claims, err := ValidateToken(tokenString)
 			if err != nil {
+				if err == jwt.ErrTokenExpired {
+					return echo.NewHTTPError(http.StatusUnauthorized, "token has expired")
+				}
 				return echo.NewHTTPError(http.StatusUnauthorized, "invalid or expired token")
 			}
 
@@ -112,12 +133,22 @@ func JWTMiddleware() echo.MiddlewareFunc {
 	}
 }
 
-// RequireRole middleware checks if user has required role
+// RequireRole middleware checks if user has required role - FIXED
 func RequireRole(allowedRoles ...string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			roleName := c.Get("role_name").(string)
+			// Safe type assertion
+			roleNameVal := c.Get("role_name")
+			if roleNameVal == nil {
+				return echo.NewHTTPError(http.StatusUnauthorized, "user not authenticated")
+			}
 
+			roleName, ok := roleNameVal.(string)
+			if !ok {
+				return echo.NewHTTPError(http.StatusInternalServerError, "invalid role type in context")
+			}
+
+			// Check if user has allowed role
 			for _, role := range allowedRoles {
 				if roleName == role {
 					return next(c)
@@ -129,20 +160,32 @@ func RequireRole(allowedRoles ...string) echo.MiddlewareFunc {
 	}
 }
 
-// GetUserIDFromContext retrieves user ID from context
+// GetUserIDFromContext retrieves user ID from context - FIXED
 func GetUserIDFromContext(c echo.Context) (uuid.UUID, error) {
-	userID, ok := c.Get("user_id").(uuid.UUID)
-	if !ok {
+	userIDVal := c.Get("user_id")
+	if userIDVal == nil {
 		return uuid.Nil, echo.NewHTTPError(http.StatusUnauthorized, "user not authenticated")
 	}
+
+	userID, ok := userIDVal.(uuid.UUID)
+	if !ok {
+		return uuid.Nil, echo.NewHTTPError(http.StatusInternalServerError, "invalid user ID type")
+	}
+
 	return userID, nil
 }
 
-// GetRoleNameFromContext retrieves role name from context
+// GetRoleNameFromContext retrieves role name from context - FIXED
 func GetRoleNameFromContext(c echo.Context) (string, error) {
-	roleName, ok := c.Get("role_name").(string)
-	if !ok {
+	roleNameVal := c.Get("role_name")
+	if roleNameVal == nil {
 		return "", echo.NewHTTPError(http.StatusUnauthorized, "user not authenticated")
 	}
+
+	roleName, ok := roleNameVal.(string)
+	if !ok {
+		return "", echo.NewHTTPError(http.StatusInternalServerError, "invalid role name type")
+	}
+
 	return roleName, nil
 }

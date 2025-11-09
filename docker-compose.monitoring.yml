@@ -1,33 +1,61 @@
-# docker-compose.monitoring.yml
-# Complete monitoring stack with Prometheus, Grafana, and Alertmanager
+# ============================================================================
+# docker-compose.monitoring.yml - ENHANCED VERSION
+# ============================================================================
 
 version: "3.8"
 
 services:
-  # Main application
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: digiorder-api
     restart: unless-stopped
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
+      ENV: production
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
+      DB_SSLMODE: ${DB_SSLMODE:-require}
       SERVER_PORT: 5582
       JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY: ${JWT_EXPIRY:-24h}
     ports:
-      - "5582:5582"
+      - "${SERVER_PORT:-5582}:5582"
     networks:
       - digiorder-network
       - monitoring
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:5582/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          cpus: "1"
+          memory: 512M
     labels:
       - "prometheus-job=digiorder-api"
+      - "com.digiorder.version=3.0.0"
 
-  # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
     container_name: digiorder-postgres
@@ -36,19 +64,57 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
     ports:
       - "5432:5432"
-    networks:
-      - digiorder-network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+      - ./init-scripts:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    networks:
+      - digiorder-network
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "effective_cache_size=1GB"
+      - "-c"
+      - "maintenance_work_mem=64MB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_buffers=16MB"
+      - "-c"
+      - "default_statistics_target=100"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "work_mem=1MB"
+      - "-c"
+      - "min_wal_size=1GB"
+      - "-c"
+      - "max_wal_size=4GB"
 
-  # Prometheus
   prometheus:
     image: prom/prometheus:latest
     container_name: digiorder-prometheus
@@ -60,6 +126,7 @@ services:
       - "--web.console.libraries=/usr/share/prometheus/console_libraries"
       - "--web.console.templates=/usr/share/prometheus/consoles"
       - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -70,18 +137,32 @@ services:
       - monitoring
     depends_on:
       - api
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--tries=1",
+          "--spider",
+          "http://localhost:9090/-/healthy",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Grafana
   grafana:
     image: grafana/grafana:latest
     container_name: digiorder-grafana
     restart: unless-stopped
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SERVER_ROOT_URL=http://localhost:3000
-      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,grafana-piechart-panel
+      - GF_RENDERING_SERVER_URL=http://renderer:8081/render
+      - GF_RENDERING_CALLBACK_URL=http://grafana:3000/
+      - GF_LOG_FILTERS=rendering:debug
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -92,8 +173,19 @@ services:
       - monitoring
     depends_on:
       - prometheus
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/api/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Alertmanager
   alertmanager:
     image: prom/alertmanager:latest
     container_name: digiorder-alertmanager
@@ -101,6 +193,7 @@ services:
     command:
       - "--config.file=/etc/alertmanager/alertmanager.yml"
       - "--storage.path=/alertmanager"
+      - "--web.external-url=http://localhost:9093"
     volumes:
       - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager_data:/alertmanager
@@ -109,7 +202,6 @@ services:
     networks:
       - monitoring
 
-  # Node Exporter (for system metrics)
   node-exporter:
     image: prom/node-exporter:latest
     container_name: digiorder-node-exporter
@@ -117,6 +209,7 @@ services:
     command:
       - "--path.procfs=/host/proc"
       - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
     volumes:
       - /proc:/host/proc:ro
@@ -127,13 +220,13 @@ services:
     networks:
       - monitoring
 
-  # Postgres Exporter (for database metrics)
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest
     container_name: digiorder-postgres-exporter
     restart: unless-stopped
     environment:
       DATA_SOURCE_NAME: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}?sslmode=disable"
+      PG_EXPORTER_EXTEND_QUERY_PATH: "/etc/postgres_exporter/queries.yaml"
     ports:
       - "9187:9187"
     networks:
@@ -141,35 +234,6 @@ services:
       - monitoring
     depends_on:
       - postgres
-
-  # Loki (for log aggregation)
-  loki:
-    image: grafana/loki:latest
-    container_name: digiorder-loki
-    restart: unless-stopped
-    command: -config.file=/etc/loki/loki-config.yml
-    volumes:
-      - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
-      - loki_data:/loki
-    ports:
-      - "3100:3100"
-    networks:
-      - monitoring
-
-  # Promtail (log collector)
-  promtail:
-    image: grafana/promtail:latest
-    container_name: digiorder-promtail
-    restart: unless-stopped
-    volumes:
-      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
-      - /var/log:/var/log:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-    command: -config.file=/etc/promtail/promtail-config.yml
-    networks:
-      - monitoring
-    depends_on:
-      - loki
 
 networks:
   digiorder-network:
@@ -179,7 +243,10 @@ networks:
 
 volumes:
   postgres_data:
+    driver: local
   prometheus_data:
+    driver: local
   grafana_data:
+    driver: local
   alertmanager_data:
-  loki_data:
+    driver: local
