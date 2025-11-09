@@ -73,7 +73,16 @@ func (q *Queries) CountAdminUsers(ctx context.Context) (int64, error) {
 
 const createAuditLog = `-- name: CreateAuditLog :one
 INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8
+)
 RETURNING id, user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, created_at
 `
 
@@ -204,17 +213,17 @@ const getAuditLogsByAction = `-- name: GetAuditLogsByAction :many
 SELECT id, user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, created_at FROM audit_logs
 WHERE action = $1
 ORDER BY created_at DESC
-LIMIT $2 OFFSET $3
+LIMIT $3 OFFSET $2
 `
 
 type GetAuditLogsByActionParams struct {
 	Action string
-	Limit  int32
 	Offset int32
+	Limit  int32
 }
 
 func (q *Queries) GetAuditLogsByAction(ctx context.Context, arg GetAuditLogsByActionParams) ([]AuditLog, error) {
-	rows, err := q.db.QueryContext(ctx, getAuditLogsByAction, arg.Action, arg.Limit, arg.Offset)
+	rows, err := q.db.QueryContext(ctx, getAuditLogsByAction, arg.Action, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -249,24 +258,25 @@ func (q *Queries) GetAuditLogsByAction(ctx context.Context, arg GetAuditLogsByAc
 
 const getAuditLogsByEntity = `-- name: GetAuditLogsByEntity :many
 SELECT id, user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, created_at FROM audit_logs
-WHERE entity_type = $1 AND entity_id = $2
+WHERE entity_type = $1
+  AND entity_id = $2
 ORDER BY created_at DESC
-LIMIT $3 OFFSET $4
+LIMIT $4 OFFSET $3
 `
 
 type GetAuditLogsByEntityParams struct {
 	EntityType string
 	EntityID   string
-	Limit      int32
 	Offset     int32
+	Limit      int32
 }
 
 func (q *Queries) GetAuditLogsByEntity(ctx context.Context, arg GetAuditLogsByEntityParams) ([]AuditLog, error) {
 	rows, err := q.db.QueryContext(ctx, getAuditLogsByEntity,
 		arg.EntityType,
 		arg.EntityID,
-		arg.Limit,
 		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err
@@ -304,17 +314,17 @@ const getAuditLogsByUser = `-- name: GetAuditLogsByUser :many
 SELECT id, user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, created_at FROM audit_logs
 WHERE user_id = $1
 ORDER BY created_at DESC
-LIMIT $2 OFFSET $3
+LIMIT $3 OFFSET $2
 `
 
 type GetAuditLogsByUserParams struct {
 	UserID uuid.NullUUID
-	Limit  int32
 	Offset int32
+	Limit  int32
 }
 
 func (q *Queries) GetAuditLogsByUser(ctx context.Context, arg GetAuditLogsByUserParams) ([]AuditLog, error) {
-	rows, err := q.db.QueryContext(ctx, getAuditLogsByUser, arg.UserID, arg.Limit, arg.Offset)
+	rows, err := q.db.QueryContext(ctx, getAuditLogsByUser, arg.UserID, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -406,16 +416,16 @@ const listActiveUsers = `-- name: ListActiveUsers :many
 SELECT id, username, full_name, password_hash, role_id, created_at, deleted_at FROM users
 WHERE deleted_at IS NULL
 ORDER BY created_at DESC
-LIMIT $1 OFFSET $2
+LIMIT $2 OFFSET $1
 `
 
 type ListActiveUsersParams struct {
-	Limit  int32
 	Offset int32
+	Limit  int32
 }
 
 func (q *Queries) ListActiveUsers(ctx context.Context, arg ListActiveUsersParams) ([]User, error) {
-	rows, err := q.db.QueryContext(ctx, listActiveUsers, arg.Limit, arg.Offset)
+	rows, err := q.db.QueryContext(ctx, listActiveUsers, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -448,16 +458,16 @@ func (q *Queries) ListActiveUsers(ctx context.Context, arg ListActiveUsersParams
 const listAuditLogs = `-- name: ListAuditLogs :many
 SELECT id, user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, created_at FROM audit_logs
 ORDER BY created_at DESC
-LIMIT $1 OFFSET $2
+LIMIT $2 OFFSET $1
 `
 
 type ListAuditLogsParams struct {
-	Limit  int32
 	Offset int32
+	Limit  int32
 }
 
 func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error) {
-	rows, err := q.db.QueryContext(ctx, listAuditLogs, arg.Limit, arg.Offset)
+	rows, err := q.db.QueryContext(ctx, listAuditLogs, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -493,16 +503,16 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 const listPermissions = `-- name: ListPermissions :many
 SELECT id, name, resource, action, description, created_at FROM permissions
 ORDER BY resource, action
-LIMIT $1 OFFSET $2
+LIMIT $2 OFFSET $1
 `
 
 type ListPermissionsParams struct {
-	Limit  int32
 	Offset int32
+	Limit  int32
 }
 
 func (q *Queries) ListPermissions(ctx context.Context, arg ListPermissionsParams) ([]Permission, error) {
-	rows, err := q.db.QueryContext(ctx, listPermissions, arg.Limit, arg.Offset)
+	rows, err := q.db.QueryContext(ctx, listPermissions, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -535,17 +545,17 @@ const listPermissionsByResource = `-- name: ListPermissionsByResource :many
 SELECT id, name, resource, action, description, created_at FROM permissions
 WHERE resource = $1
 ORDER BY action
-LIMIT $2 OFFSET $3
+LIMIT $3 OFFSET $2
 `
 
 type ListPermissionsByResourceParams struct {
 	Resource string
-	Limit    int32
 	Offset   int32
+	Limit    int32
 }
 
 func (q *Queries) ListPermissionsByResource(ctx context.Context, arg ListPermissionsByResourceParams) ([]Permission, error) {
-	rows, err := q.db.QueryContext(ctx, listPermissionsByResource, arg.Resource, arg.Limit, arg.Offset)
+	rows, err := q.db.QueryContext(ctx, listPermissionsByResource, arg.Resource, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -590,7 +600,8 @@ func (q *Queries) RevokePermissionFromRole(ctx context.Context, arg RevokePermis
 }
 
 const softDeleteUser = `-- name: SoftDeleteUser :exec
-UPDATE users SET deleted_at = NOW()
+UPDATE users
+SET deleted_at = NOW()
 WHERE id = $1
 `
 
@@ -602,29 +613,29 @@ func (q *Queries) SoftDeleteUser(ctx context.Context, id uuid.UUID) error {
 const updatePermission = `-- name: UpdatePermission :one
 UPDATE permissions
 SET
-    name = COALESCE(NULLIF($2, ''), name),
-    resource = COALESCE(NULLIF($3, ''), resource),
-    action = COALESCE(NULLIF($4, ''), action),
-    description = COALESCE(NULLIF($5, ''), description)
-WHERE id = $1
+    name = COALESCE(NULLIF($1, ''), name),
+    resource = COALESCE(NULLIF($2, ''), resource),
+    action = COALESCE(NULLIF($3, ''), action),
+    description = COALESCE(NULLIF($4, ''), description)
+WHERE id = $5
 RETURNING id, name, resource, action, description, created_at
 `
 
 type UpdatePermissionParams struct {
-	ID      int32
-	Column2 interface{}
-	Column3 interface{}
-	Column4 interface{}
-	Column5 interface{}
+	Name        interface{}
+	Resource    interface{}
+	Action      interface{}
+	Description interface{}
+	ID          int32
 }
 
 func (q *Queries) UpdatePermission(ctx context.Context, arg UpdatePermissionParams) (Permission, error) {
 	row := q.db.QueryRowContext(ctx, updatePermission,
+		arg.Name,
+		arg.Resource,
+		arg.Action,
+		arg.Description,
 		arg.ID,
-		arg.Column2,
-		arg.Column3,
-		arg.Column4,
-		arg.Column5,
 	)
 	var i Permission
 	err := row.Scan(

@@ -10,8 +10,9 @@ import (
 	"net/http"
 	"time"
 
-	db "github.com/jamalkaksouri/DigiOrder/internal/db"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
+	db "github.com/jamalkaksouri/DigiOrder/internal/db"
 	"github.com/labstack/echo/v4"
 )
 

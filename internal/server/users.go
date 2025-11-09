@@ -350,11 +350,3 @@ func (s *Server) DeleteUser(c echo.Context) error {
 
 	return c.NoContent(http.StatusNoContent)
 }
-
-// Helper function to log audit trails
-func (s *Server) logAudit(ctx interface{}, userID uuid.UUID, action, entityType, entityID string, 
-	oldValues, newValues map[string]interface{}, ipAddress, userAgent string) {
-	
-	// Implementation will be in audit.go
-	// This is a placeholder to show the structure
-}
