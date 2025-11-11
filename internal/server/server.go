@@ -13,6 +13,8 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	db "github.com/jamalkaksouri/DigiOrder/internal/db"
+	"github.com/jamalkaksouri/DigiOrder/internal/logging"
+	"github.com/jamalkaksouri/DigiOrder/internal/middleware"
 	"github.com/labstack/echo/v4"
 )
 
@@ -23,6 +25,8 @@ type Server struct {
 	router    *echo.Echo
 	validator *validator.Validate
 	server    *http.Server
+	logger    *logging.Logger // NEW
+	rateLimiter *middleware.PersistentRateLimiter // NEW
 }
 
 // New creates a new Server instance with all its dependencies.

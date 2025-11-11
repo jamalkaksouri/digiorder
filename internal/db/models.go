@@ -105,6 +105,15 @@ type RolePermission struct {
 	CreatedAt    sql.NullTime
 }
 
+// Tracks system initialization. Admin user must be created via secure setup endpoint with strong password.
+type SystemSetup struct {
+	ID               int32
+	AdminCreated     sql.NullBool
+	SetupCompletedAt sql.NullTime
+	SetupByIp        sql.NullString
+	CreatedAt        sql.NullTime
+}
+
 type User struct {
 	ID           uuid.UUID
 	Username     string

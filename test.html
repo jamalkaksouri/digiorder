@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    test
+  </body>
+  <script>
+    // Login
+    async function get() {
+      const loginResponse = await fetch(
+        "http://localhost:5582/api/v1/auth/login",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: "admin",
+            password: "admin123456",
+          }),
+        }
+      );
+
+      const { data } = await loginResponse.json();
+      const token = data.token;
+
+      // Get products
+      const productsResponse = await fetch(
+        "http://localhost:5582/api/v1/products",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const products = await productsResponse.json();
+      console.log(products.data);
+    }
+    get();
+  </script>
+</html>

@@ -10,13 +10,13 @@ import (
 	"github.com/google/uuid"
 	db "github.com/jamalkaksouri/DigiOrder/internal/db"
 	"github.com/jamalkaksouri/DigiOrder/internal/middleware"
+	"github.com/jamalkaksouri/DigiOrder/internal/security"
 	"github.com/labstack/echo/v4"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // Constants
 const (
-	RoleAdmin      = 1 // Admin role ID
+	RoleAdmin      = 1                                      // Admin role ID
 	PrimaryAdminID = "00000000-0000-0000-0000-000000000001" // Primary admin UUID
 )
 
@@ -39,13 +39,13 @@ func (s *Server) CreateUser(c echo.Context) error {
 	// Verify admin role
 	roleName, err := middleware.GetRoleNameFromContext(c)
 	if err != nil || roleName != "admin" {
-		return RespondError(c, http.StatusForbidden, "insufficient_permissions", 
+		return RespondError(c, http.StatusForbidden, "insufficient_permissions",
 			"Only administrators can create users.")
 	}
 
 	var req CreateUserReq
 	if err := c.Bind(&req); err != nil {
-		return RespondError(c, http.StatusBadRequest, "invalid_request", 
+		return RespondError(c, http.StatusBadRequest, "invalid_request",
 			"The request body is not valid.")
 	}
 
@@ -53,23 +53,39 @@ func (s *Server) CreateUser(c echo.Context) error {
 		return RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
 	}
 
+	// Use new password validation
+	if err := security.ValidatePassword(req.Password,
+		security.DefaultPasswordRequirements()); err != nil {
+
+		suggestions := security.SuggestPasswordImprovement(req.Password)
+		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+			"error":       "weak_password",
+			"details":     err.Error(),
+			"suggestions": suggestions,
+			"requirements": map[string]interface{}{
+				"min_length": 12,
+				"requires":   []string{"uppercase", "lowercase", "digit", "special char"},
+			},
+		})
+	}
+
+	// Hash with stronger cost
+	hashedPassword, err := security.HashPassword(req.Password)
+	if err != nil {
+		return RespondError(c, http.StatusInternalServerError,
+			"hash_error", "Failed to hash password.")
+	}
+
 	// Verify role exists
 	ctx := c.Request().Context()
 	role, err := s.queries.GetRole(ctx, req.RoleID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return RespondError(c, http.StatusBadRequest, "invalid_role", 
+			return RespondError(c, http.StatusBadRequest, "invalid_role",
 				"The specified role does not exist.")
 		}
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to verify role.")
-	}
-
-	// Hash password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return RespondError(c, http.StatusInternalServerError, "hash_error", 
-			"Failed to hash password.")
 	}
 
 	// Create user
@@ -81,10 +97,10 @@ func (s *Server) CreateUser(c echo.Context) error {
 	})
 	if err != nil {
 		if err.Error() == "pq: duplicate key value violates unique constraint \"users_username_key\"" {
-			return RespondError(c, http.StatusConflict, "duplicate_username", 
+			return RespondError(c, http.StatusConflict, "duplicate_username",
 				"A user with this username already exists.")
 		}
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to create user.")
 	}
 
@@ -106,7 +122,7 @@ func (s *Server) GetUser(c echo.Context) error {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return RespondError(c, http.StatusBadRequest, "invalid_id", 
+		return RespondError(c, http.StatusBadRequest, "invalid_id",
 			"The provided ID is not a valid UUID.")
 	}
 
@@ -114,16 +130,16 @@ func (s *Server) GetUser(c echo.Context) error {
 	user, err := s.queries.GetUser(ctx, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return RespondError(c, http.StatusNotFound, "not_found", 
+			return RespondError(c, http.StatusNotFound, "not_found",
 				"User with the specified ID was not found.")
 		}
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to retrieve user.")
 	}
 
 	// Check if user is deleted
 	if user.DeletedAt.Valid {
-		return RespondError(c, http.StatusNotFound, "not_found", 
+		return RespondError(c, http.StatusNotFound, "not_found",
 			"User has been deleted.")
 	}
 
@@ -137,7 +153,7 @@ func (s *Server) GetUser(c echo.Context) error {
 	}
 
 	// Don't return password hash
-	user.PasswordHash = ""
+	// user.PasswordHash = ""
 
 	response := map[string]interface{}{
 		"id":         user.ID,
@@ -172,7 +188,7 @@ func (s *Server) ListUsers(c echo.Context) error {
 		Offset: int32(offset),
 	})
 	if err != nil {
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to fetch users.")
 	}
 
@@ -209,19 +225,19 @@ func (s *Server) UpdateUser(c echo.Context) error {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return RespondError(c, http.StatusBadRequest, "invalid_id", 
+		return RespondError(c, http.StatusBadRequest, "invalid_id",
 			"The provided ID is not a valid UUID.")
 	}
 
 	// Check if trying to update primary admin
 	if id.String() == PrimaryAdminID {
-		return RespondError(c, http.StatusForbidden, "protected_user", 
+		return RespondError(c, http.StatusForbidden, "protected_user",
 			"The primary administrator account cannot be modified.")
 	}
 
 	var req UpdateUserReq
 	if err := c.Bind(&req); err != nil {
-		return RespondError(c, http.StatusBadRequest, "invalid_request", 
+		return RespondError(c, http.StatusBadRequest, "invalid_request",
 			"The request body is not valid.")
 	}
 
@@ -231,10 +247,10 @@ func (s *Server) UpdateUser(c echo.Context) error {
 	oldUser, err := s.queries.GetUser(ctx, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return RespondError(c, http.StatusNotFound, "not_found", 
+			return RespondError(c, http.StatusNotFound, "not_found",
 				"User with the specified ID was not found.")
 		}
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to retrieve user.")
 	}
 
@@ -250,10 +266,10 @@ func (s *Server) UpdateUser(c echo.Context) error {
 		_, err := s.queries.GetRole(ctx, *req.RoleID)
 		if err != nil {
 			if err == sql.ErrNoRows {
-				return RespondError(c, http.StatusBadRequest, "invalid_role", 
+				return RespondError(c, http.StatusBadRequest, "invalid_role",
 					"The specified role does not exist.")
 			}
-			return RespondError(c, http.StatusInternalServerError, "db_error", 
+			return RespondError(c, http.StatusInternalServerError, "db_error",
 				"Failed to verify role.")
 		}
 		params.RoleID = sql.NullInt32{Int32: *req.RoleID, Valid: true}
@@ -262,16 +278,16 @@ func (s *Server) UpdateUser(c echo.Context) error {
 	user, err := s.queries.UpdateUser(ctx, params)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return RespondError(c, http.StatusNotFound, "not_found", 
+			return RespondError(c, http.StatusNotFound, "not_found",
 				"User with the specified ID was not found.")
 		}
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to update user.")
 	}
 
 	// Log audit
 	currentUserID, _ := middleware.GetUserIDFromContext(c)
-	s.logAudit(ctx, currentUserID, "update", "user", user.ID.String(), 
+	s.logAudit(ctx, currentUserID, "update", "user", user.ID.String(),
 		map[string]interface{}{
 			"full_name": oldUser.FullName.String,
 			"role_id":   oldUser.RoleID.Int32,
@@ -293,13 +309,13 @@ func (s *Server) DeleteUser(c echo.Context) error {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return RespondError(c, http.StatusBadRequest, "invalid_id", 
+		return RespondError(c, http.StatusBadRequest, "invalid_id",
 			"The provided ID is not a valid UUID.")
 	}
 
 	// CRITICAL: Protect primary admin from deletion
 	if id.String() == PrimaryAdminID {
-		return RespondError(c, http.StatusForbidden, "protected_user", 
+		return RespondError(c, http.StatusForbidden, "protected_user",
 			"The primary administrator account cannot be deleted. This account is essential for system administration.")
 	}
 
@@ -309,10 +325,10 @@ func (s *Server) DeleteUser(c echo.Context) error {
 	user, err := s.queries.GetUser(ctx, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return RespondError(c, http.StatusNotFound, "not_found", 
+			return RespondError(c, http.StatusNotFound, "not_found",
 				"User with the specified ID was not found.")
 		}
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to retrieve user.")
 	}
 
@@ -320,11 +336,11 @@ func (s *Server) DeleteUser(c echo.Context) error {
 	if user.RoleID.Int32 == RoleAdmin {
 		admins, err := s.queries.CountAdminUsers(ctx)
 		if err != nil {
-			return RespondError(c, http.StatusInternalServerError, "db_error", 
+			return RespondError(c, http.StatusInternalServerError, "db_error",
 				"Failed to verify admin count.")
 		}
 		if admins <= 1 {
-			return RespondError(c, http.StatusForbidden, "last_admin", 
+			return RespondError(c, http.StatusForbidden, "last_admin",
 				"Cannot delete the last administrator. At least one admin must exist in the system.")
 		}
 	}
@@ -332,13 +348,13 @@ func (s *Server) DeleteUser(c echo.Context) error {
 	// Soft delete
 	err = s.queries.SoftDeleteUser(ctx, id)
 	if err != nil {
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to delete user.")
 	}
 
 	// Log audit
 	currentUserID, _ := middleware.GetUserIDFromContext(c)
-	s.logAudit(ctx, currentUserID, "delete", "user", user.ID.String(), 
+	s.logAudit(ctx, currentUserID, "delete", "user", user.ID.String(),
 		map[string]interface{}{
 			"username": user.Username,
 			"deleted":  false,

@@ -5,7 +5,9 @@ import (
 	"net/http"
 
 	db "github.com/jamalkaksouri/DigiOrder/internal/db"
+	"github.com/jamalkaksouri/DigiOrder/internal/logging"
 	"github.com/jamalkaksouri/DigiOrder/internal/middleware"
+	"github.com/jamalkaksouri/DigiOrder/internal/security"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -18,8 +20,8 @@ type LoginRequest struct {
 
 // LoginResponse defines the login response
 type LoginResponse struct {
-	Token     string `json:"token"`
-	ExpiresIn string `json:"expires_in"`
+	Token     string   `json:"token"`
+	ExpiresIn string   `json:"expires_in"`
 	User      UserInfo `json:"user"`
 }
 
@@ -39,6 +41,8 @@ type RefreshTokenRequest struct {
 
 // Login handles POST /api/v1/auth/login
 func (s *Server) Login(c echo.Context) error {
+	// Get logger from context
+	logger := logging.GetLogger(c)
 	var req LoginRequest
 	if err := c.Bind(&req); err != nil {
 		return RespondError(c, http.StatusBadRequest, "invalid_request", "The request body is not valid.")
@@ -58,6 +62,22 @@ func (s *Server) Login(c echo.Context) error {
 		}
 		return RespondError(c, http.StatusInternalServerError, "db_error", "Failed to authenticate user.")
 	}
+
+	// Use secure password comparison
+	err = security.ComparePassword(user.PasswordHash, req.Password)
+	if err != nil {
+		logger.Info("Failed login attempt", map[string]interface{}{
+			"username": req.Username,
+			"ip":       c.RealIP(),
+		})
+		return RespondError(c, http.StatusUnauthorized,
+			"invalid_credentials", "Invalid username or password.")
+	}
+
+	logger.Info("Successful login", map[string]interface{}{
+		"user_id":  user.ID,
+		"username": user.Username,
+	})
 
 	// Verify password
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password))
