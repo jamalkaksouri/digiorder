@@ -1,14 +1,10 @@
 # .gitignore - UPDATED FOR SECURITY
 
-# Environment files - NEVER commit these!
+# Environment files - never commit these
 .env
 .env.*
 !.env.example
-.env.local
-.env.development
-.env.test
-.env.production
-.env.staging
+
 
 # Secrets and credentials
 *.key
