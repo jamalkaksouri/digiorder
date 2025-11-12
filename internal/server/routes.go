@@ -214,7 +214,7 @@ func (s *Server) healthCheck(c echo.Context) error {
 	// Check database connection
 	err := s.db.Ping()
 	if err != nil {
-		return c.JSON(http.StatusServiceUnavailable, map[string]interface{}{
+		return c.JSON(http.StatusServiceUnavailable, map[string]any{
 			"status":   "unhealthy",
 			"service":  "DigiOrder API",
 			"database": "disconnected",
@@ -222,7 +222,7 @@ func (s *Server) healthCheck(c echo.Context) error {
 		})
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"status":   "healthy",
 		"service":  "DigiOrder API",
 		"database": "connected",

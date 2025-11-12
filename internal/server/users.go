@@ -58,11 +58,11 @@ func (s *Server) CreateUser(c echo.Context) error {
 		security.DefaultPasswordRequirements()); err != nil {
 
 		suggestions := security.SuggestPasswordImprovement(req.Password)
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+		return c.JSON(http.StatusBadRequest, map[string]any{
 			"error":       "weak_password",
 			"details":     err.Error(),
 			"suggestions": suggestions,
-			"requirements": map[string]interface{}{
+			"requirements": map[string]any{
 				"min_length": 12,
 				"requires":   []string{"uppercase", "lowercase", "digit", "special char"},
 			},
@@ -106,7 +106,7 @@ func (s *Server) CreateUser(c echo.Context) error {
 
 	// Log audit
 	currentUserID, _ := middleware.GetUserIDFromContext(c)
-	s.logAudit(ctx, currentUserID, "create", "user", user.ID.String(), nil, map[string]interface{}{
+	s.logAudit(ctx, currentUserID, "create", "user", user.ID.String(), nil, map[string]any{
 		"username": user.Username,
 		"role":     role.Name,
 	}, c.RealIP(), c.Request().UserAgent())
@@ -155,7 +155,7 @@ func (s *Server) GetUser(c echo.Context) error {
 	// Don't return password hash
 	// user.PasswordHash = ""
 
-	response := map[string]interface{}{
+	response := map[string]any{
 		"id":         user.ID,
 		"username":   user.Username,
 		"full_name":  user.FullName.String,
@@ -197,7 +197,7 @@ func (s *Server) ListUsers(c echo.Context) error {
 	}
 
 	// Remove password hashes and add role names
-	result := make([]map[string]interface{}, len(users))
+	result := make([]map[string]any, len(users))
 	for i, user := range users {
 		var roleName string
 		if user.RoleID.Valid {
@@ -207,7 +207,7 @@ func (s *Server) ListUsers(c echo.Context) error {
 			}
 		}
 
-		result[i] = map[string]interface{}{
+		result[i] = map[string]any{
 			"id":         user.ID,
 			"username":   user.Username,
 			"full_name":  user.FullName.String,
@@ -288,11 +288,11 @@ func (s *Server) UpdateUser(c echo.Context) error {
 	// Log audit
 	currentUserID, _ := middleware.GetUserIDFromContext(c)
 	s.logAudit(ctx, currentUserID, "update", "user", user.ID.String(),
-		map[string]interface{}{
+		map[string]any{
 			"full_name": oldUser.FullName.String,
 			"role_id":   oldUser.RoleID.Int32,
 		},
-		map[string]interface{}{
+		map[string]any{
 			"full_name": user.FullName.String,
 			"role_id":   user.RoleID.Int32,
 		},
@@ -355,11 +355,11 @@ func (s *Server) DeleteUser(c echo.Context) error {
 	// Log audit
 	currentUserID, _ := middleware.GetUserIDFromContext(c)
 	s.logAudit(ctx, currentUserID, "delete", "user", user.ID.String(),
-		map[string]interface{}{
+		map[string]any{
 			"username": user.Username,
 			"deleted":  false,
 		},
-		map[string]interface{}{
+		map[string]any{
 			"deleted": true,
 		},
 		c.RealIP(), c.Request().UserAgent())

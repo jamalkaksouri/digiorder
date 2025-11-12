@@ -59,7 +59,7 @@ func (s *Server) CreatePermission(c echo.Context) error {
 	// Log audit
 	currentUserID, _ := middleware.GetUserIDFromContext(c)
 	s.logAudit(ctx, currentUserID, "create", "permission", strconv.Itoa(int(permission.ID)), 
-		nil, map[string]interface{}{
+		nil, map[string]any{
 			"name":     permission.Name,
 			"resource": permission.Resource,
 			"action":   permission.Action,
@@ -192,12 +192,12 @@ func (s *Server) UpdatePermission(c echo.Context) error {
 	// Log audit
 	currentUserID, _ := middleware.GetUserIDFromContext(c)
 	s.logAudit(ctx, currentUserID, "update", "permission", strconv.Itoa(int(permission.ID)), 
-		map[string]interface{}{
+		map[string]any{
 			"name":     oldPermission.Name,
 			"resource": oldPermission.Resource,
 			"action":   oldPermission.Action,
 		},
-		map[string]interface{}{
+		map[string]any{
 			"name":     permission.Name,
 			"resource": permission.Resource,
 			"action":   permission.Action,
@@ -237,7 +237,7 @@ func (s *Server) DeletePermission(c echo.Context) error {
 	// Log audit
 	currentUserID, _ := middleware.GetUserIDFromContext(c)
 	s.logAudit(ctx, currentUserID, "delete", "permission", strconv.Itoa(int(permission.ID)), 
-		map[string]interface{}{
+		map[string]any{
 			"name":     permission.Name,
 			"resource": permission.Resource,
 			"action":   permission.Action,
@@ -305,7 +305,7 @@ func (s *Server) AssignPermissionToRole(c echo.Context) error {
 	// Log audit
 	currentUserID, _ := middleware.GetUserIDFromContext(c)
 	s.logAudit(ctx, currentUserID, "assign", "role_permission", 
-		strconv.Itoa(int(rolePermission.ID)), nil, map[string]interface{}{
+		strconv.Itoa(int(rolePermission.ID)), nil, map[string]any{
 			"role_id":       roleID,
 			"permission_id": req.PermissionID,
 			"permission":    permission.Name,
@@ -344,7 +344,7 @@ func (s *Server) RevokePermissionFromRole(c echo.Context) error {
 	// Log audit
 	currentUserID, _ := middleware.GetUserIDFromContext(c)
 	s.logAudit(ctx, currentUserID, "revoke", "role_permission", "", 
-		map[string]interface{}{
+		map[string]any{
 			"role_id":       roleID,
 			"permission_id": permissionID,
 		}, nil, c.RealIP(), c.Request().UserAgent())
@@ -410,7 +410,7 @@ func (s *Server) CheckUserPermission(c echo.Context) error {
 			"Failed to check permission.")
 	}
 
-	return RespondSuccess(c, http.StatusOK, map[string]interface{}{
+	return RespondSuccess(c, http.StatusOK, map[string]any{
 		"has_permission": hasPermission,
 		"resource":       resource,
 		"action":         action,

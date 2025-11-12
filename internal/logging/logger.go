@@ -44,7 +44,7 @@ type LogEntry struct {
 	StatusCode  int                    `json:"status_code,omitempty"`
 	Duration    int64                  `json:"duration_ms,omitempty"`
 	Error       string                 `json:"error,omitempty"`
-	Fields      map[string]interface{} `json:"fields,omitempty"`
+	Fields      map[string]any `json:"fields,omitempty"`
 }
 
 // NewLogger creates a new structured logger
@@ -144,7 +144,7 @@ func (l *Logger) printReadable(entry LogEntry) {
 }
 
 // Debug logs a debug message
-func (l *Logger) Debug(msg string, fields map[string]interface{}) {
+func (l *Logger) Debug(msg string, fields map[string]any) {
 	l.log(LogEntry{
 		Level:   LevelDebug,
 		Message: msg,
@@ -153,7 +153,7 @@ func (l *Logger) Debug(msg string, fields map[string]interface{}) {
 }
 
 // Info logs an info message
-func (l *Logger) Info(msg string, fields map[string]interface{}) {
+func (l *Logger) Info(msg string, fields map[string]any) {
 	l.log(LogEntry{
 		Level:   LevelInfo,
 		Message: msg,
@@ -162,7 +162,7 @@ func (l *Logger) Info(msg string, fields map[string]interface{}) {
 }
 
 // Warn logs a warning message
-func (l *Logger) Warn(msg string, fields map[string]interface{}) {
+func (l *Logger) Warn(msg string, fields map[string]any) {
 	l.log(LogEntry{
 		Level:   LevelWarn,
 		Message: msg,
@@ -171,7 +171,7 @@ func (l *Logger) Warn(msg string, fields map[string]interface{}) {
 }
 
 // Error logs an error message
-func (l *Logger) Error(msg string, err error, fields map[string]interface{}) {
+func (l *Logger) Error(msg string, err error, fields map[string]any) {
 	entry := LogEntry{
 		Level:   LevelError,
 		Message: msg,
@@ -184,7 +184,7 @@ func (l *Logger) Error(msg string, err error, fields map[string]interface{}) {
 }
 
 // Fatal logs a fatal message and exits
-func (l *Logger) Fatal(msg string, err error, fields map[string]interface{}) {
+func (l *Logger) Fatal(msg string, err error, fields map[string]any) {
 	entry := LogEntry{
 		Level:   LevelFatal,
 		Message: msg,
@@ -231,7 +231,7 @@ type ContextLogger struct {
 }
 
 // Info logs with context
-func (cl *ContextLogger) Info(msg string, fields map[string]interface{}) {
+func (cl *ContextLogger) Info(msg string, fields map[string]any) {
 	cl.logger.log(LogEntry{
 		Level:     LevelInfo,
 		Message:   msg,
@@ -245,7 +245,7 @@ func (cl *ContextLogger) Info(msg string, fields map[string]interface{}) {
 }
 
 // Error logs error with context
-func (cl *ContextLogger) Error(msg string, err error, fields map[string]interface{}) {
+func (cl *ContextLogger) Error(msg string, err error, fields map[string]any) {
 	entry := LogEntry{
 		Level:     LevelError,
 		Message:   msg,

@@ -622,10 +622,10 @@ RETURNING id, name, resource, action, description, created_at
 `
 
 type UpdatePermissionParams struct {
-	Name        interface{}
-	Resource    interface{}
-	Action      interface{}
-	Description interface{}
+	Name        any
+	Resource    any
+	Action      any
+	Description any
 	ID          int32
 }
 

@@ -29,7 +29,7 @@ type AuditLogFilter struct {
 
 // logAudit creates an audit log entry
 func (s *Server) logAudit(ctx context.Context, userID uuid.UUID, action, entityType, entityID string, 
-	oldValues, newValues map[string]interface{}, ipAddress, userAgent string) error {
+	oldValues, newValues map[string]any, ipAddress, userAgent string) error {
 	
 	var oldJSON, newJSON pqtype.NullRawMessage
 
@@ -129,9 +129,9 @@ func (s *Server) GetAuditLogs(c echo.Context) error {
 	}
 
 	// Enrich with user information
-	enrichedLogs := make([]map[string]interface{}, len(logs))
+	enrichedLogs := make([]map[string]any, len(logs))
 	for i, log := range logs {
-		enriched := map[string]interface{}{
+		enriched := map[string]any{
 			"id":          log.ID,
 			"user_id":     log.UserID.UUID,
 			"action":      log.Action,
@@ -178,7 +178,7 @@ func (s *Server) GetAuditLog(c echo.Context) error {
 			"Failed to retrieve audit log.")
 	}
 
-	enriched := map[string]interface{}{
+	enriched := map[string]any{
 		"id":          log.ID,
 		"user_id":     log.UserID.UUID,
 		"action":      log.Action,
@@ -239,9 +239,9 @@ func (s *Server) GetUserActivity(c echo.Context) error {
 	}
 
 	// Format response
-	activities := make([]map[string]interface{}, len(logs))
+	activities := make([]map[string]any, len(logs))
 	for i, log := range logs {
-		activities[i] = map[string]interface{}{
+		activities[i] = map[string]any{
 			"id":          log.ID,
 			"action":      log.Action,
 			"entity_type": log.EntityType,
@@ -288,9 +288,9 @@ func (s *Server) GetEntityHistory(c echo.Context) error {
 	}
 
 	// Format response with user information
-	history := make([]map[string]interface{}, len(logs))
+	history := make([]map[string]any, len(logs))
 	for i, log := range logs {
-		h := map[string]interface{}{
+		h := map[string]any{
 			"id":         log.ID,
 			"action":     log.Action,
 			"old_values": json.RawMessage(log.OldValues.RawMessage),

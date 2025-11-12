@@ -66,7 +66,7 @@ func (s *Server) Login(c echo.Context) error {
 	// Use secure password comparison
 	err = security.ComparePassword(user.PasswordHash, req.Password)
 	if err != nil {
-		logger.Info("Failed login attempt", map[string]interface{}{
+		logger.Info("Failed login attempt", map[string]any{
 			"username": req.Username,
 			"ip":       c.RealIP(),
 		})
@@ -74,7 +74,7 @@ func (s *Server) Login(c echo.Context) error {
 			"invalid_credentials", "Invalid username or password.")
 	}
 
-	logger.Info("Successful login", map[string]interface{}{
+	logger.Info("Successful login", map[string]any{
 		"user_id":  user.ID,
 		"username": user.Username,
 	})
@@ -139,7 +139,7 @@ func (s *Server) RefreshToken(c echo.Context) error {
 		return RespondError(c, http.StatusInternalServerError, "token_error", "Failed to refresh token.")
 	}
 
-	response := map[string]interface{}{
+	response := map[string]any{
 		"token":      newToken,
 		"expires_in": middleware.GetJWTExpiry().String(),
 	}

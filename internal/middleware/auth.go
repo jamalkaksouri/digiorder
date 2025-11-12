@@ -69,7 +69,7 @@ func GenerateToken(userID uuid.UUID, username string, roleID int32, roleName str
 
 // ValidateToken validates and parses a JWT token
 func ValidateToken(tokenString string) (*JWTClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (any, error) {
 		// Verify signing method
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, jwt.ErrSignatureInvalid

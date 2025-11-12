@@ -127,13 +127,13 @@ func (mc *MetricsCollector) RecordRequest(c echo.Context, duration time.Duration
 }
 
 // GetMetrics returns current metrics
-func (mc *MetricsCollector) GetMetrics() map[string]interface{} {
+func (mc *MetricsCollector) GetMetrics() map[string]any {
 	avgDuration := time.Duration(0)
 	if mc.totalRequests > 0 {
 		avgDuration = mc.totalDuration / time.Duration(mc.totalRequests)
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"total_requests":      mc.totalRequests,
 		"total_errors":        mc.totalErrors,
 		"error_rate":          float64(mc.totalErrors) / float64(mc.totalRequests) * 100,

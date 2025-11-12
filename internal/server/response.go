@@ -12,7 +12,7 @@ type ErrorResponse struct {
 
 // ساختار موفقیت
 type SuccessResponse struct {
-	Data interface{} `json:"data"`
+	Data any `json:"data"`
 }
 
 // هندلر برای خطا
@@ -24,7 +24,7 @@ func RespondError(c echo.Context, code int, err string, details string) error {
 }
 
 // هندلر برای موفقیت
-func RespondSuccess(c echo.Context, code int, data interface{}) error {
+func RespondSuccess(c echo.Context, code int, data any) error {
 	return c.JSON(code, SuccessResponse{
 		Data: data,
 	})

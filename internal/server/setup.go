@@ -29,19 +29,19 @@ func (s *Server) InitialSetup(c echo.Context) error {
 	// Check if setup is already complete
 	setupStatus, err := s.queries.GetSystemSetupStatus(ctx)
 	if err != nil && err != sql.ErrNoRows {
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to check setup status.")
 	}
 
-	if setupStatus.AdminCreated {
-		return RespondError(c, http.StatusForbidden, "already_setup", 
+	if setupStatus.AdminCreated.Valid && setupStatus.AdminCreated.Bool {
+		return RespondError(c, http.StatusForbidden, "already_setup",
 			"System has already been initialized. This endpoint is disabled.")
 	}
 
 	// Parse request
 	var req InitialSetupRequest
 	if err := c.Bind(&req); err != nil {
-		return RespondError(c, http.StatusBadRequest, "invalid_request", 
+		return RespondError(c, http.StatusBadRequest, "invalid_request",
 			"The request body is not valid.")
 	}
 
@@ -51,7 +51,7 @@ func (s *Server) InitialSetup(c echo.Context) error {
 
 	// Verify passwords match
 	if req.Password != req.ConfirmPassword {
-		return RespondError(c, http.StatusBadRequest, "password_mismatch", 
+		return RespondError(c, http.StatusBadRequest, "password_mismatch",
 			"Passwords do not match.")
 	}
 
@@ -59,15 +59,15 @@ func (s *Server) InitialSetup(c echo.Context) error {
 	// In production, this should be a one-time token from environment or secure config
 	expectedToken := getEnv("INITIAL_SETUP_TOKEN", "")
 	if expectedToken == "" || req.SetupToken != expectedToken {
-		return RespondError(c, http.StatusUnauthorized, "invalid_setup_token", 
+		return RespondError(c, http.StatusUnauthorized, "invalid_setup_token",
 			"Invalid or missing setup token.")
 	}
 
 	// Validate password strength
-	if err := security.ValidatePassword(req.Password, 
+	if err := security.ValidatePassword(req.Password,
 		security.DefaultPasswordRequirements()); err != nil {
 		suggestions := security.SuggestPasswordImprovement(req.Password)
-		return c.JSON(http.StatusBadRequest, map[string]interface{}{
+		return c.JSON(http.StatusBadRequest, map[string]any{
 			"error":       "weak_password",
 			"details":     err.Error(),
 			"suggestions": suggestions,
@@ -77,7 +77,7 @@ func (s *Server) InitialSetup(c echo.Context) error {
 	// Hash password
 	hashedPassword, err := security.HashPassword(req.Password)
 	if err != nil {
-		return RespondError(c, http.StatusInternalServerError, "hash_error", 
+		return RespondError(c, http.StatusInternalServerError, "hash_error",
 			"Failed to process password.")
 	}
 
@@ -91,14 +91,14 @@ func (s *Server) InitialSetup(c echo.Context) error {
 		RoleID:       sql.NullInt32{Int32: 1, Valid: true}, // Admin role
 	})
 	if err != nil {
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to create admin user.")
 	}
 
 	// Mark setup as complete
-	err = s.queries.CompleteSystemSetup(ctx, db.CompleteSystemSetupParams{
-		AdminCreated: true,
-		SetupByIP:    sql.NullString{String: c.RealIP(), Valid: true},
+	_, err = s.queries.CompleteSystemSetup(ctx, db.CompleteSystemSetupParams{
+		AdminCreated: sql.NullBool{Bool: true, Valid: true}, // Was just "true"
+		SetupByIp:    sql.NullString{String: c.RealIP(), Valid: true},
 	})
 	if err != nil {
 		// Log error but don't fail the request since admin was created
@@ -108,7 +108,7 @@ func (s *Server) InitialSetup(c echo.Context) error {
 	// Don't return password hash
 	user.PasswordHash = ""
 
-	return RespondSuccess(c, http.StatusCreated, map[string]interface{}{
+	return RespondSuccess(c, http.StatusCreated, map[string]any{
 		"message": "System initialized successfully. Initial admin user created.",
 		"user":    user,
 		"next_steps": []string{
@@ -127,18 +127,18 @@ func (s *Server) GetSetupStatus(c echo.Context) error {
 	setupStatus, err := s.queries.GetSystemSetupStatus(ctx)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return RespondSuccess(c, http.StatusOK, map[string]interface{}{
+			return RespondSuccess(c, http.StatusOK, map[string]any{
 				"setup_required": true,
 				"admin_exists":   false,
 			})
 		}
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to check setup status.")
 	}
 
-	return RespondSuccess(c, http.StatusOK, map[string]interface{}{
-		"setup_required": !setupStatus.AdminCreated,
-		"admin_exists":   setupStatus.AdminCreated,
+	return RespondSuccess(c, http.StatusOK, map[string]any{
+		"setup_required":     !(setupStatus.AdminCreated.Valid && setupStatus.AdminCreated.Bool),
+		"admin_exists":       setupStatus.AdminCreated.Valid && setupStatus.AdminCreated.Bool,
 		"setup_completed_at": setupStatus.SetupCompletedAt,
 	})
 }
