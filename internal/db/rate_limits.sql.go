@@ -11,7 +11,8 @@ import (
 )
 
 const countLoginAttempts = `-- name: CountLoginAttempts :one
-SELECT COUNT(*) FROM api_rate_limits
+SELECT COALESCE(SUM(requests_count), 0)::bigint as count
+FROM api_rate_limits
 WHERE client_id = $1 
   AND endpoint = '/api/v1/auth/login'
   AND window_start >= $2
@@ -45,7 +46,8 @@ INSERT INTO api_rate_limits (client_id, endpoint, requests_count, window_start)
 VALUES ($1, $2, 1, $3)
 ON CONFLICT (client_id, endpoint, window_start) 
 DO UPDATE SET 
-    requests_count = api_rate_limits.requests_count + 1
+    requests_count = api_rate_limits.requests_count + 1,
+    created_at = NOW()
 RETURNING id, client_id, endpoint, requests_count, window_start, created_at
 `
 
@@ -193,19 +195,24 @@ func (q *Queries) GetTopRateLimitedIPs(ctx context.Context, arg GetTopRateLimite
 	return items, nil
 }
 
-const recordLoginAttempt = `-- name: RecordLoginAttempt :exec
+const recordLoginAttempt = `-- name: RecordLoginAttempt :one
 INSERT INTO api_rate_limits (client_id, endpoint, requests_count, window_start)
-VALUES ($1, '/api/v1/auth/login', 1, $2)
+VALUES ($1, '/api/v1/auth/login', 1, NOW())
 ON CONFLICT (client_id, endpoint, window_start) 
 DO UPDATE SET requests_count = api_rate_limits.requests_count + 1
+RETURNING id, client_id, endpoint, requests_count, window_start, created_at
 `
 
-type RecordLoginAttemptParams struct {
-	ClientID    string
-	WindowStart time.Time
-}
-
-func (q *Queries) RecordLoginAttempt(ctx context.Context, arg RecordLoginAttemptParams) error {
-	_, err := q.db.ExecContext(ctx, recordLoginAttempt, arg.ClientID, arg.WindowStart)
-	return err
+func (q *Queries) RecordLoginAttempt(ctx context.Context, clientID string) (ApiRateLimit, error) {
+	row := q.db.QueryRowContext(ctx, recordLoginAttempt, clientID)
+	var i ApiRateLimit
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.Endpoint,
+		&i.RequestsCount,
+		&i.WindowStart,
+		&i.CreatedAt,
+	)
+	return i, err
 }

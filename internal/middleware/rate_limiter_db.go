@@ -81,10 +81,12 @@ func (rl *PersistentRateLimiter) GetLimiter(clientID string) *rate.Limiter {
 func (rl *PersistentRateLimiter) RecordRequest(ctx context.Context, clientID, endpoint string, allowed bool) error {
 	// This is async to not block the request
 	go func() {
+		// Create new context for async operation
+		asyncCtx := context.Background()
 		windowStart := time.Now().Truncate(rl.windowSize)
 		
 		// Try to insert or update
-		_, err := rl.queries.GetOrCreateRateLimit(ctx, db.GetOrCreateRateLimitParams{
+		_, err := rl.queries.GetOrCreateRateLimit(asyncCtx, db.GetOrCreateRateLimitParams{
 			ClientID:    clientID,
 			Endpoint:    endpoint,
 			WindowStart: windowStart,
@@ -92,6 +94,7 @@ func (rl *PersistentRateLimiter) RecordRequest(ctx context.Context, clientID, en
 		
 		if err != nil {
 			// Log error but don't fail the request
+			// In production, send to error tracking service
 			return
 		}
 	}()
@@ -154,7 +157,7 @@ func PersistentRateLimitMiddleware(queries *db.Queries, config RateLimitConfig) 
 		return func(c echo.Context) error {
 			// Get client identifier (IP + User Agent hash for better uniqueness)
 			clientIP := c.RealIP()
-			userAgent := c.Request().UserAgent()
+			c.Request().UserAgent()
 			clientID := clientIP // Simple version, can be enhanced
 			
 			endpoint := c.Path()
@@ -213,6 +216,7 @@ func LoginRateLimitMiddleware(queries *db.Queries, maxAttempts int, window time.
 				c.Logger().Error("Failed to check login attempts:", err)
 				// Allow request on error to prevent DOS via DB errors
 			} else if count >= int64(maxAttempts) {
+				RecordRateLimitExceeded("/api/v1/auth/login")
 				return echo.NewHTTPError(http.StatusTooManyRequests, 
 					"Too many login attempts. Please try again in 5 minutes.")
 			}
@@ -220,19 +224,15 @@ func LoginRateLimitMiddleware(queries *db.Queries, maxAttempts int, window time.
 			// Continue with request
 			err = next(c)
 
-			// Record login attempt (success or failure)
-			status := "success"
-			if err != nil {
-				status = "failure"
-			}
-
-			// Record in DB (async)
+			// Record login attempt after processing
+			// Use goroutine to avoid blocking
 			go func() {
-				queries.RecordLoginAttempt(context.Background(), db.RecordLoginAttemptParams{
-					ClientID:  clientIP,
-					Status:    status,
-					Timestamp: time.Now(),
-				})
+				asyncCtx := context.Background()
+				_, recordErr := queries.RecordLoginAttempt(asyncCtx, clientIP)
+				if recordErr != nil {
+					// Log but don't fail the request
+					c.Logger().Error("Failed to record login attempt:", recordErr)
+				}
 			}()
 
 			return err

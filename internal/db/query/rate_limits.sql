@@ -5,7 +5,8 @@ INSERT INTO api_rate_limits (client_id, endpoint, requests_count, window_start)
 VALUES ($1, $2, 1, $3)
 ON CONFLICT (client_id, endpoint, window_start) 
 DO UPDATE SET 
-    requests_count = api_rate_limits.requests_count + 1
+    requests_count = api_rate_limits.requests_count + 1,
+    created_at = NOW()
 RETURNING *;
 
 -- name: GetRateLimitByWindow :one
@@ -20,16 +21,18 @@ DELETE FROM api_rate_limits
 WHERE window_start < $1;
 
 -- name: CountLoginAttempts :one
-SELECT COUNT(*) FROM api_rate_limits
+SELECT COALESCE(SUM(requests_count), 0)::bigint as count
+FROM api_rate_limits
 WHERE client_id = $1 
   AND endpoint = '/api/v1/auth/login'
   AND window_start >= $2;
 
--- name: RecordLoginAttempt :exec
+-- name: RecordLoginAttempt :one
 INSERT INTO api_rate_limits (client_id, endpoint, requests_count, window_start)
-VALUES ($1, '/api/v1/auth/login', 1, $2)
+VALUES ($1, '/api/v1/auth/login', 1, NOW())
 ON CONFLICT (client_id, endpoint, window_start) 
-DO UPDATE SET requests_count = api_rate_limits.requests_count + 1;
+DO UPDATE SET requests_count = api_rate_limits.requests_count + 1
+RETURNING *;
 
 -- name: GetRateLimitStats :many
 SELECT 

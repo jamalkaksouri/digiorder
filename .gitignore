@@ -87,4 +87,4 @@ backups/*.gz
 # Monitoring data (local)
 prometheus_data/
 grafana_data/
-alertmanager_data/
+alertmanager_data/.env
