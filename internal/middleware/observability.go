@@ -97,13 +97,6 @@ var (
 		[]string{"status"},
 	)
 
-	authTokensActive = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "auth_tokens_active",
-			Help: "Number of active authentication tokens",
-		},
-	)
-
 	// Cache metrics
 	cacheHitsTotal = promauto.NewCounter(
 		prometheus.CounterOpts{
@@ -174,7 +167,7 @@ func PrometheusMiddleware() echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			// Start timer
 			start := time.Now()
-			
+
 			// Increment in-flight requests
 			httpRequestsInFlight.Inc()
 			defer httpRequestsInFlight.Dec()

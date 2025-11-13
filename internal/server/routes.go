@@ -1,3 +1,4 @@
+// internal/server/routes.go - FIXED VERSION
 package server
 
 import (
@@ -21,7 +22,6 @@ func (s *Server) registerRoutes() {
 	// Global middleware
 	s.router.Use(echomiddleware.Logger())
 	s.router.Use(echomiddleware.Recover())
-	s.router.Use(echomiddleware.CORS())
 	s.router.Use(echomiddleware.RequestID())
 	s.router.Use(echomiddleware.Secure())
 
@@ -29,38 +29,37 @@ func (s *Server) registerRoutes() {
 	s.router.Use(requestLogger.Middleware())
 	s.router.Use(metricsCollector.Middleware())
 
-	// Rate limiting - 100 requests per second, burst of 200
-	s.router.Use(middleware.RateLimitMiddleware(100, 200))
-
 	// Set custom error handler
 	s.router.HTTPErrorHandler = s.customHTTPErrorHandler
 
-	// Public endpoints
+	// Public endpoints (NO AUTH REQUIRED)
 	s.router.GET("/health", s.healthCheck)
 	s.router.GET("/metrics", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, metricsCollector.GetMetrics())
 	})
 
-	// Add structured logging middleware FIRST
-	s.router.Use(logging.LoggingMiddleware(s.logger))
+	// Prometheus metrics endpoint
+	s.router.GET("/metrics", echo.WrapHandler(promhttp.Handler()))
+
+	// Structured logging middleware
+	if s.logger != nil {
+		s.router.Use(logging.LoggingMiddleware(s.logger))
+	}
 
 	// Secure CORS
 	s.router.Use(middleware.SecureCORSMiddleware())
 
 	// Persistent rate limiting
-	s.router.Use(middleware.PersistentRateLimitMiddleware(
-		s.queries,
-		middleware.DefaultRateLimitConfig(),
-	))
-
-	// ... rest of middleware ...
-
-	// Setup endpoints (before auth)
-	setup := s.router.Group("/api/v1/setup")
-	{
-		setup.GET("/status", s.GetSetupStatus)
-		setup.POST("/initialize", s.InitialSetup)
+	if s.rateLimiter != nil && s.queries != nil {
+		s.router.Use(middleware.PersistentRateLimitMiddleware(
+			s.queries,
+			middleware.DefaultRateLimitConfig(),
+		))
 	}
+
+	// Observability middleware
+	s.router.Use(middleware.PrometheusMiddleware())
+	s.router.Use(middleware.TracingMiddleware())
 
 	// API v1 group
 	api := s.router.Group("/api/v1")
@@ -68,12 +67,21 @@ func (s *Server) registerRoutes() {
 	// ==================== PUBLIC AUTH ENDPOINTS ====================
 	auth := api.Group("/auth")
 	{
-		auth.POST("/login", s.Login)
+		// Login with special rate limiting
+		if s.queries != nil {
+			auth.POST("/login", s.Login,
+				middleware.LoginRateLimitMiddleware(s.queries, 5, 5*time.Minute))
+		} else {
+			auth.POST("/login", s.Login)
+		}
 		auth.POST("/refresh", s.RefreshToken)
-		// Special rate limiting for login
-		auth.POST("/login", s.Login,
-			middleware.LoginRateLimitMiddleware(s.queries, 5, 5*time.Minute))
-		auth.POST("/refresh", s.RefreshToken)
+	}
+
+	// Setup endpoints (before auth)
+	setup := api.Group("/setup")
+	{
+		setup.GET("/status", s.GetSetupStatus)
+		setup.POST("/initialize", s.InitialSetup)
 	}
 
 	// ==================== PROTECTED ENDPOINTS ====================
@@ -81,13 +89,14 @@ func (s *Server) registerRoutes() {
 	protected := api.Group("")
 	protected.Use(middleware.JWTMiddleware())
 
-	// API key rate limiting for authenticated users - 1000 requests per minute
+	// API key rate limiting for authenticated users
 	protected.Use(middleware.APIKeyRateLimitMiddleware(1000))
 
 	// Auth profile endpoints (require authentication)
 	{
 		protected.GET("/auth/profile", s.GetProfile)
 		protected.PUT("/auth/password", s.ChangePassword)
+		protected.GET("/auth/check-permission", s.CheckUserPermission)
 	}
 
 	// Product routes (with caching for GET requests)
@@ -158,6 +167,7 @@ func (s *Server) registerRoutes() {
 		users.GET("/:id", s.GetUser)
 		users.PUT("/:id", s.UpdateUser)
 		users.DELETE("/:id", s.DeleteUser)
+		users.GET("/:user_id/activity", s.GetUserActivity)
 	}
 
 	// Role routes (admin only)
@@ -169,6 +179,9 @@ func (s *Server) registerRoutes() {
 		roles.GET("/:id", s.GetRole)
 		roles.PUT("/:id", s.UpdateRole)
 		roles.DELETE("/:id", s.DeleteRole)
+		roles.POST("/:role_id/permissions", s.AssignPermissionToRole)
+		roles.GET("/:role_id/permissions", s.GetRolePermissions)
+		roles.DELETE("/:role_id/permissions/:permission_id", s.RevokePermissionFromRole)
 	}
 
 	// Permission routes (admin only)
@@ -182,13 +195,6 @@ func (s *Server) registerRoutes() {
 		permissions.DELETE("/:id", s.DeletePermission)
 	}
 
-	// Role permission management
-	{
-		protected.POST("/roles/:role_id/permissions", s.AssignPermissionToRole, middleware.RequireRole("admin"))
-		protected.GET("/roles/:role_id/permissions", s.GetRolePermissions)
-		protected.DELETE("/roles/:role_id/permissions/:permission_id", s.RevokePermissionFromRole, middleware.RequireRole("admin"))
-	}
-
 	// Audit log routes (admin only)
 	auditLogs := protected.Group("/audit-logs")
 	auditLogs.Use(middleware.RequireRole("admin"))
@@ -198,15 +204,6 @@ func (s *Server) registerRoutes() {
 		auditLogs.GET("/entity/:type/:id", s.GetEntityHistory)
 		auditLogs.GET("/stats", s.GetAuditStats)
 	}
-
-	// User activity
-	protected.GET("/users/:user_id/activity", s.GetUserActivity, middleware.RequireRole("admin"))
-
-	// Permission check
-	protected.GET("/auth/check-permission", s.CheckUserPermission)
-
-	// Prometheus metrics
-	s.router.GET("/metrics", echo.WrapHandler(promhttp.Handler()))
 }
 
 // Health check endpoint
@@ -226,7 +223,7 @@ func (s *Server) healthCheck(c echo.Context) error {
 		"status":   "healthy",
 		"service":  "DigiOrder API",
 		"database": "connected",
-		"version":  "2.0.0",
+		"version":  "3.0.0",
 	})
 }
 

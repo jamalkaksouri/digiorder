@@ -1,7 +1,4 @@
-// ============================================================================
-// internal/server/server.go - ENHANCED VERSION
-// ============================================================================
-
+// internal/server/server.go - FIXED VERSION
 package server
 
 import (
@@ -20,13 +17,13 @@ import (
 
 // Server holds the dependencies for our application.
 type Server struct {
-	db        *sql.DB
-	queries   *db.Queries
-	router    *echo.Echo
-	validator *validator.Validate
-	server    *http.Server
-	logger    *logging.Logger // NEW
-	rateLimiter *middleware.PersistentRateLimiter // NEW
+	db          *sql.DB
+	queries     *db.Queries
+	router      *echo.Echo
+	validator   *validator.Validate
+	server      *http.Server
+	logger      *logging.Logger
+	rateLimiter *middleware.PersistentRateLimiter
 }
 
 // New creates a new Server instance with all its dependencies.
@@ -43,11 +40,23 @@ func New(database *sql.DB) *Server {
 	// Register custom validators
 	registerCustomValidators(v)
 
+	// Create database queries
+	queries := db.New(database)
+
+	// CRITICAL FIX: Initialize logger
+	logger := logging.NewLogger("digiorder", getEnv("ENV", "production"))
+
+	// CRITICAL FIX: Initialize rate limiter with DB backing
+	rateLimiter := middleware.NewPersistentRateLimiter(queries,
+		middleware.DefaultRateLimitConfig())
+
 	server := &Server{
-		db:        database,
-		queries:   db.New(database),
-		router:    e,
-		validator: v,
+		db:          database,
+		queries:     queries,
+		router:      e,
+		validator:   v,
+		logger:      logger,      // NOW INITIALIZED
+		rateLimiter: rateLimiter, // NOW INITIALIZED
 	}
 
 	// Register all routes and middleware
@@ -94,3 +103,11 @@ func registerCustomValidators(v *validator.Validate) {
 		return true
 	})
 }
+
+// getEnv retrieves environment variable with fallback
+// func getEnv(key, fallback string) string {
+// 	if value := os.Getenv(key); value != "" {
+// 		return value
+// 	}
+// 	return fallback
+// }

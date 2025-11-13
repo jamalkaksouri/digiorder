@@ -117,7 +117,7 @@ type GetRateLimitStatsRow struct {
 	ClientID      string
 	Endpoint      string
 	TotalRequests int64
-	LastRequest   any
+	LastRequest   interface{}
 }
 
 func (q *Queries) GetRateLimitStats(ctx context.Context, limit int32) ([]GetRateLimitStatsRow, error) {
@@ -169,7 +169,7 @@ type GetTopRateLimitedIPsParams struct {
 type GetTopRateLimitedIPsRow struct {
 	ClientID       string
 	ViolationCount int64
-	LastViolation  any
+	LastViolation  interface{}
 }
 
 func (q *Queries) GetTopRateLimitedIPs(ctx context.Context, arg GetTopRateLimitedIPsParams) ([]GetTopRateLimitedIPsRow, error) {

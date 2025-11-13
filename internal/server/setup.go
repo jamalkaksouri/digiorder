@@ -1,4 +1,4 @@
-// internal/server/setup.go - Secure initial setup endpoint
+// internal/server/setup.go - FIXED VERSION
 package server
 
 import (
@@ -56,7 +56,6 @@ func (s *Server) InitialSetup(c echo.Context) error {
 	}
 
 	// Verify setup token (should be provided via secure channel)
-	// In production, this should be a one-time token from environment or secure config
 	expectedToken := getEnv("INITIAL_SETUP_TOKEN", "")
 	if expectedToken == "" || req.SetupToken != expectedToken {
 		return RespondError(c, http.StatusUnauthorized, "invalid_setup_token",
@@ -97,12 +96,17 @@ func (s *Server) InitialSetup(c echo.Context) error {
 
 	// Mark setup as complete
 	_, err = s.queries.CompleteSystemSetup(ctx, db.CompleteSystemSetupParams{
-		AdminCreated: sql.NullBool{Bool: true, Valid: true}, // Was just "true"
+		AdminCreated: sql.NullBool{Bool: true, Valid: true},
 		SetupByIp:    sql.NullString{String: c.RealIP(), Valid: true},
 	})
 	if err != nil {
 		// Log error but don't fail the request since admin was created
-		s.logger.Error("Failed to mark setup as complete", err, nil)
+		// FIXED: Only use logger if it's not nil
+		if s.logger != nil {
+			s.logger.Error("Failed to mark setup as complete", err, nil)
+		} else {
+			s.router.Logger.Error("Failed to mark setup as complete:", err)
+		}
 	}
 
 	// Don't return password hash
