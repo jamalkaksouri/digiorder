@@ -48,7 +48,7 @@ ON CONFLICT (client_id, endpoint, window_start)
 DO UPDATE SET 
     requests_count = api_rate_limits.requests_count + 1,
     created_at = NOW()
-RETURNING id, client_id, endpoint, requests_count, window_start, created_at
+RETURNING id, client_id, endpoint, requests_count, window_start, created_at, exclude_from_tracking
 `
 
 type GetOrCreateRateLimitParams struct {
@@ -68,12 +68,13 @@ func (q *Queries) GetOrCreateRateLimit(ctx context.Context, arg GetOrCreateRateL
 		&i.RequestsCount,
 		&i.WindowStart,
 		&i.CreatedAt,
+		&i.ExcludeFromTracking,
 	)
 	return i, err
 }
 
 const getRateLimitByWindow = `-- name: GetRateLimitByWindow :one
-SELECT id, client_id, endpoint, requests_count, window_start, created_at FROM api_rate_limits
+SELECT id, client_id, endpoint, requests_count, window_start, created_at, exclude_from_tracking FROM api_rate_limits
 WHERE client_id = $1 
   AND endpoint = $2 
   AND window_start = $3
@@ -96,6 +97,7 @@ func (q *Queries) GetRateLimitByWindow(ctx context.Context, arg GetRateLimitByWi
 		&i.RequestsCount,
 		&i.WindowStart,
 		&i.CreatedAt,
+		&i.ExcludeFromTracking,
 	)
 	return i, err
 }
@@ -200,7 +202,7 @@ INSERT INTO api_rate_limits (client_id, endpoint, requests_count, window_start)
 VALUES ($1, '/api/v1/auth/login', 1, NOW())
 ON CONFLICT (client_id, endpoint, window_start) 
 DO UPDATE SET requests_count = api_rate_limits.requests_count + 1
-RETURNING id, client_id, endpoint, requests_count, window_start, created_at
+RETURNING id, client_id, endpoint, requests_count, window_start, created_at, exclude_from_tracking
 `
 
 func (q *Queries) RecordLoginAttempt(ctx context.Context, clientID string) (ApiRateLimit, error) {
@@ -213,6 +215,7 @@ func (q *Queries) RecordLoginAttempt(ctx context.Context, clientID string) (ApiR
 		&i.RequestsCount,
 		&i.WindowStart,
 		&i.CreatedAt,
+		&i.ExcludeFromTracking,
 	)
 	return i, err
 }

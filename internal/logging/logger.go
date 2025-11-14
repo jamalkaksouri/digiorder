@@ -31,19 +31,19 @@ type Logger struct {
 
 // LogEntry represents a structured log entry
 type LogEntry struct {
-	Timestamp   time.Time              `json:"timestamp"`
-	Level       LogLevel               `json:"level"`
-	Service     string                 `json:"service"`
-	Environment string                 `json:"environment"`
-	Message     string                 `json:"message"`
-	RequestID   string                 `json:"request_id,omitempty"`
-	TraceID     string                 `json:"trace_id,omitempty"`
-	UserID      string                 `json:"user_id,omitempty"`
-	Method      string                 `json:"method,omitempty"`
-	Path        string                 `json:"path,omitempty"`
-	StatusCode  int                    `json:"status_code,omitempty"`
-	Duration    int64                  `json:"duration_ms,omitempty"`
-	Error       string                 `json:"error,omitempty"`
+	Timestamp   time.Time      `json:"timestamp"`
+	Level       LogLevel       `json:"level"`
+	Service     string         `json:"service"`
+	Environment string         `json:"environment"`
+	Message     string         `json:"message"`
+	RequestID   string         `json:"request_id,omitempty"`
+	TraceID     string         `json:"trace_id,omitempty"`
+	UserID      string         `json:"user_id,omitempty"`
+	Method      string         `json:"method,omitempty"`
+	Path        string         `json:"path,omitempty"`
+	StatusCode  int            `json:"status_code,omitempty"`
+	Duration    int64          `json:"duration_ms,omitempty"`
+	Error       string         `json:"error,omitempty"`
 	Fields      map[string]any `json:"fields,omitempty"`
 }
 

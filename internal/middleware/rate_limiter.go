@@ -59,7 +59,7 @@ func (rl *RateLimiter) CleanupVisitors() {
 // RateLimitMiddleware creates a rate limiting middleware
 func RateLimitMiddleware(requestsPerSecond int, burst int) echo.MiddlewareFunc {
 	limiter := NewRateLimiter(rate.Limit(requestsPerSecond), burst)
-	
+
 	// Start cleanup goroutine
 	go limiter.CleanupVisitors()
 
@@ -67,10 +67,10 @@ func RateLimitMiddleware(requestsPerSecond int, burst int) echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			// Get client IP
 			ip := c.RealIP()
-			
+
 			// Get limiter for this IP
 			l := limiter.GetLimiter(ip)
-			
+
 			if !l.Allow() {
 				return echo.NewHTTPError(http.StatusTooManyRequests, "rate limit exceeded")
 			}
@@ -124,7 +124,7 @@ func APIKeyRateLimitMiddleware(requestsPerMinute int) echo.MiddlewareFunc {
 			}
 
 			l := limiter.GetLimiter(apiKey)
-			
+
 			if !l.Allow() {
 				return echo.NewHTTPError(http.StatusTooManyRequests, "API rate limit exceeded")
 			}

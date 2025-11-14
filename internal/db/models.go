@@ -13,12 +13,24 @@ import (
 )
 
 type ApiRateLimit struct {
-	ID            uuid.UUID
-	ClientID      string
-	Endpoint      string
-	RequestsCount int32
-	WindowStart   time.Time
-	CreatedAt     sql.NullTime
+	ID                  uuid.UUID
+	ClientID            string
+	Endpoint            string
+	RequestsCount       int32
+	WindowStart         time.Time
+	CreatedAt           sql.NullTime
+	ExcludeFromTracking sql.NullBool
+}
+
+// Archive of old rate limit records for historical analysis
+type ApiRateLimitsArchive struct {
+	ID                uuid.NullUUID
+	ClientID          string
+	Endpoint          string
+	RequestsCount     int32
+	WindowStart       time.Time
+	ArchivedAt        sql.NullTime
+	OriginalCreatedAt sql.NullTime
 }
 
 type AuditLog struct {
@@ -39,9 +51,46 @@ type Category struct {
 	Name string
 }
 
+type CurrentlyBlockedIp struct {
+	ClientID      string
+	Endpoint      string
+	TotalAttempts int64
+	LastAttempt   interface{}
+	BlockWindows  int64
+}
+
 type DosageForm struct {
 	ID   int32
 	Name string
+}
+
+type LoginAttemptStat struct {
+	Hour                int64
+	TotalAttempts       int64
+	Successful          int64
+	Failed              int64
+	RateLimitedAttempts int64
+	UniqueIps           int64
+	UniqueUsernames     int64
+}
+
+// Comprehensive logging of all login attempts with detailed user information for security auditing
+type LoginAttemptsLog struct {
+	ID                  uuid.UUID
+	Username            string
+	IpAddress           string
+	UserAgent           sql.NullString
+	AttemptTime         sql.NullTime
+	Success             bool
+	FailureReason       sql.NullString
+	RateLimited         sql.NullBool
+	RateLimitReleasedAt sql.NullTime
+	ReleasedBy          sql.NullString
+	SessionID           sql.NullString
+	Country             sql.NullString
+	City                sql.NullString
+	DeviceInfo          pqtype.NullRawMessage
+	CreatedAt           sql.NullTime
 }
 
 type Order struct {
@@ -91,6 +140,22 @@ type ProductBarcode struct {
 	Barcode     string
 	BarcodeType sql.NullString
 	CreatedAt   sql.NullTime
+}
+
+// Tracks when users are released from rate limiting, either automatically or manually
+type RateLimitRelease struct {
+	ID               uuid.UUID
+	ClientID         string
+	IpAddress        string
+	Username         sql.NullString
+	BlockedAt        time.Time
+	ReleasedAt       sql.NullTime
+	ReleasedBy       string
+	ReleasedByUserID uuid.NullUUID
+	BlockDuration    sql.NullInt64
+	AttemptsCount    sql.NullInt32
+	ReleaseReason    sql.NullString
+	CreatedAt        sql.NullTime
 }
 
 type Role struct {

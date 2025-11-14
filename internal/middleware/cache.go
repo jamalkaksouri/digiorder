@@ -32,10 +32,10 @@ func NewCache(ttl time.Duration) *Cache {
 		entries: make(map[string]*CacheEntry),
 		ttl:     ttl,
 	}
-	
+
 	// Start cleanup goroutine
 	go cache.cleanup()
-	
+
 	return cache
 }
 
@@ -43,17 +43,17 @@ func NewCache(ttl time.Duration) *Cache {
 func (c *Cache) Get(key string) (*CacheEntry, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	entry, exists := c.entries[key]
 	if !exists {
 		return nil, false
 	}
-	
+
 	// Check if entry is expired
 	if time.Since(entry.Timestamp) > c.ttl {
 		return nil, false
 	}
-	
+
 	return entry, true
 }
 
@@ -61,7 +61,7 @@ func (c *Cache) Get(key string) (*CacheEntry, bool) {
 func (c *Cache) Set(key string, entry *CacheEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	c.entries[key] = entry
 }
 
@@ -69,7 +69,7 @@ func (c *Cache) Set(key string, entry *CacheEntry) {
 func (c *Cache) Delete(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	delete(c.entries, key)
 }
 
@@ -77,7 +77,7 @@ func (c *Cache) Delete(key string) {
 func (c *Cache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	c.entries = make(map[string]*CacheEntry)
 }
 
@@ -85,7 +85,7 @@ func (c *Cache) Clear() {
 func (c *Cache) cleanup() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		c.mu.Lock()
 		for key, entry := range c.entries {
@@ -100,15 +100,15 @@ func (c *Cache) cleanup() {
 // generateCacheKey creates a unique key for the request
 func generateCacheKey(c echo.Context) string {
 	req := c.Request()
-	
+
 	// Include method, path, and query string
 	base := fmt.Sprintf("%s:%s?%s", req.Method, req.URL.Path, req.URL.RawQuery)
-	
+
 	// Add user context if available
 	if userID, ok := c.Get("user_id").(string); ok {
 		base += fmt.Sprintf(":user:%s", userID)
 	}
-	
+
 	// Create hash
 	hash := md5.Sum([]byte(base))
 	return hex.EncodeToString(hash[:])
@@ -117,48 +117,48 @@ func generateCacheKey(c echo.Context) string {
 // CacheMiddleware creates a caching middleware
 func CacheMiddleware(ttl time.Duration, cachableStatuses ...int) echo.MiddlewareFunc {
 	cache := NewCache(ttl)
-	
+
 	// Default cachable statuses
 	if len(cachableStatuses) == 0 {
 		cachableStatuses = []int{http.StatusOK}
 	}
-	
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			// Only cache GET requests
 			if c.Request().Method != http.MethodGet {
 				return next(c)
 			}
-			
+
 			// Generate cache key
 			key := generateCacheKey(c)
-			
+
 			// Check cache
 			if entry, found := cache.Get(key); found {
 				// Serve from cache
 				c.Response().Header().Set("X-Cache", "HIT")
 				c.Response().Header().Set("X-Cache-Age", fmt.Sprintf("%d", int(time.Since(entry.Timestamp).Seconds())))
-				
+
 				// Copy headers
 				for k, v := range entry.Headers {
 					for _, vv := range v {
 						c.Response().Header().Set(k, vv)
 					}
 				}
-				
+
 				return c.Blob(entry.StatusCode, echo.MIMEApplicationJSON, entry.Body)
 			}
-			
+
 			// Create custom response writer to capture response
 			rec := &responseRecorder{
 				ResponseWriter: c.Response().Writer,
-				body:          []byte{},
+				body:           []byte{},
 			}
 			c.Response().Writer = rec
-			
+
 			// Call next handler
 			err := next(c)
-			
+
 			// Check if response should be cached
 			shouldCache := false
 			for _, status := range cachableStatuses {
@@ -167,7 +167,7 @@ func CacheMiddleware(ttl time.Duration, cachableStatuses ...int) echo.Middleware
 					break
 				}
 			}
-			
+
 			if err == nil && shouldCache {
 				// Store in cache
 				entry := &CacheEntry{
@@ -179,7 +179,7 @@ func CacheMiddleware(ttl time.Duration, cachableStatuses ...int) echo.Middleware
 				cache.Set(key, entry)
 				c.Response().Header().Set("X-Cache", "MISS")
 			}
-			
+
 			return err
 		}
 	}
@@ -208,11 +208,11 @@ func CacheInvalidationMiddleware(cache *Cache) echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			// Clear cache on write operations
 			method := c.Request().Method
-			if method == http.MethodPost || method == http.MethodPut || 
-			   method == http.MethodPatch || method == http.MethodDelete {
+			if method == http.MethodPost || method == http.MethodPut ||
+				method == http.MethodPatch || method == http.MethodDelete {
 				cache.Clear()
 			}
-			
+
 			return next(c)
 		}
 	}

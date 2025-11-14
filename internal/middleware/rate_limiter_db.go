@@ -15,23 +15,23 @@ import (
 
 // PersistentRateLimiter tracks rate limits in database
 type PersistentRateLimiter struct {
-	queries      *db.Queries
-	inMemory     map[string]*rate.Limiter
-	mu           sync.RWMutex
-	globalRate   rate.Limit
-	globalBurst  int
-	windowSize   time.Duration
+	queries       *db.Queries
+	inMemory      map[string]*rate.Limiter
+	mu            sync.RWMutex
+	globalRate    rate.Limit
+	globalBurst   int
+	windowSize    time.Duration
 	cleanupTicker *time.Ticker
 }
 
 // RateLimitConfig holds configuration for rate limiting
 type RateLimitConfig struct {
-	GlobalRPS         int           // Requests per second
-	GlobalBurst       int           // Burst capacity
-	AuthenticatedRPM  int           // Requests per minute for auth users
-	LoginMaxAttempts  int           // Max login attempts per IP
-	LoginWindow       time.Duration // Time window for login attempts
-	WindowSize        time.Duration // Database record window
+	GlobalRPS        int           // Requests per second
+	GlobalBurst      int           // Burst capacity
+	AuthenticatedRPM int           // Requests per minute for auth users
+	LoginMaxAttempts int           // Max login attempts per IP
+	LoginWindow      time.Duration // Time window for login attempts
+	WindowSize       time.Duration // Database record window
 }
 
 // DefaultRateLimitConfig returns sensible defaults
@@ -49,11 +49,11 @@ func DefaultRateLimitConfig() RateLimitConfig {
 // NewPersistentRateLimiter creates a rate limiter with DB backing
 func NewPersistentRateLimiter(queries *db.Queries, config RateLimitConfig) *PersistentRateLimiter {
 	rl := &PersistentRateLimiter{
-		queries:      queries,
-		inMemory:     make(map[string]*rate.Limiter),
-		globalRate:   rate.Limit(config.GlobalRPS),
-		globalBurst:  config.GlobalBurst,
-		windowSize:   config.WindowSize,
+		queries:       queries,
+		inMemory:      make(map[string]*rate.Limiter),
+		globalRate:    rate.Limit(config.GlobalRPS),
+		globalBurst:   config.GlobalBurst,
+		windowSize:    config.WindowSize,
 		cleanupTicker: time.NewTicker(5 * time.Minute),
 	}
 
@@ -84,14 +84,14 @@ func (rl *PersistentRateLimiter) RecordRequest(ctx context.Context, clientID, en
 		// Create new context for async operation
 		asyncCtx := context.Background()
 		windowStart := time.Now().Truncate(rl.windowSize)
-		
+
 		// Try to insert or update
 		_, err := rl.queries.GetOrCreateRateLimit(asyncCtx, db.GetOrCreateRateLimitParams{
 			ClientID:    clientID,
 			Endpoint:    endpoint,
 			WindowStart: windowStart,
 		})
-		
+
 		if err != nil {
 			// Log error but don't fail the request
 			// In production, send to error tracking service
@@ -159,7 +159,7 @@ func PersistentRateLimitMiddleware(queries *db.Queries, config RateLimitConfig) 
 			clientIP := c.RealIP()
 			c.Request().UserAgent()
 			clientID := clientIP // Simple version, can be enhanced
-			
+
 			endpoint := c.Path()
 			ctx := c.Request().Context()
 
@@ -168,24 +168,24 @@ func PersistentRateLimitMiddleware(queries *db.Queries, config RateLimitConfig) 
 			if !inMemLimiter.Allow() {
 				// Record the rate limit hit
 				limiter.RecordRequest(ctx, clientID, endpoint, false)
-				
+
 				// Record metrics
 				RecordRateLimitExceeded(endpoint)
-				
-				return echo.NewHTTPError(http.StatusTooManyRequests, 
+
+				return echo.NewHTTPError(http.StatusTooManyRequests,
 					"Rate limit exceeded. Please try again later.")
 			}
 
 			// For critical endpoints, also check DB
 			if endpoint == "/api/v1/auth/login" {
-				allowed, err := limiter.CheckRateLimit(ctx, clientID, endpoint, 
+				allowed, err := limiter.CheckRateLimit(ctx, clientID, endpoint,
 					int32(config.LoginMaxAttempts))
 				if err != nil {
 					// Log error but allow request
 					c.Logger().Error("Rate limit DB check failed:", err)
 				} else if !allowed {
 					limiter.RecordRequest(ctx, clientID, endpoint, false)
-					return echo.NewHTTPError(http.StatusTooManyRequests, 
+					return echo.NewHTTPError(http.StatusTooManyRequests,
 						"Too many login attempts. Please try again later.")
 				}
 			}
@@ -217,7 +217,7 @@ func LoginRateLimitMiddleware(queries *db.Queries, maxAttempts int, window time.
 				// Allow request on error to prevent DOS via DB errors
 			} else if count >= int64(maxAttempts) {
 				RecordRateLimitExceeded("/api/v1/auth/login")
-				return echo.NewHTTPError(http.StatusTooManyRequests, 
+				return echo.NewHTTPError(http.StatusTooManyRequests,
 					"Too many login attempts. Please try again in 5 minutes.")
 			}
 

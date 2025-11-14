@@ -22,10 +22,10 @@ func NewRequestLogger(logger echo.Logger) *RequestLogger {
 func (rl *RequestLogger) LogRequest(c echo.Context, start time.Time, err error) {
 	req := c.Request()
 	res := c.Response()
-	
+
 	// Calculate request duration
 	duration := time.Since(start)
-	
+
 	// Get user info if available
 	userID := "anonymous"
 	username := "anonymous"
@@ -83,11 +83,11 @@ func (rl *RequestLogger) Middleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			start := time.Now()
-			
+
 			err := next(c)
-			
+
 			rl.LogRequest(c, start, err)
-			
+
 			return err
 		}
 	}
@@ -95,12 +95,12 @@ func (rl *RequestLogger) Middleware() echo.MiddlewareFunc {
 
 // MetricsCollector collects API metrics
 type MetricsCollector struct {
-	totalRequests     int64
-	totalErrors       int64
-	totalDuration     time.Duration
-	requestsByMethod  map[string]int64
-	requestsByPath    map[string]int64
-	requestsByStatus  map[int]int64
+	totalRequests    int64
+	totalErrors      int64
+	totalDuration    time.Duration
+	requestsByMethod map[string]int64
+	requestsByPath   map[string]int64
+	requestsByStatus map[int]int64
 }
 
 // NewMetricsCollector creates a new metrics collector
@@ -116,11 +116,11 @@ func NewMetricsCollector() *MetricsCollector {
 func (mc *MetricsCollector) RecordRequest(c echo.Context, duration time.Duration, status int) {
 	mc.totalRequests++
 	mc.totalDuration += duration
-	
+
 	if status >= 400 {
 		mc.totalErrors++
 	}
-	
+
 	mc.requestsByMethod[c.Request().Method]++
 	mc.requestsByPath[c.Path()]++
 	mc.requestsByStatus[status]++
@@ -149,14 +149,14 @@ func (mc *MetricsCollector) Middleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			start := time.Now()
-			
+
 			err := next(c)
-			
+
 			duration := time.Since(start)
 			status := c.Response().Status
-			
+
 			mc.RecordRequest(c, duration, status)
-			
+
 			return err
 		}
 	}

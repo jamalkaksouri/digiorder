@@ -273,3 +273,34 @@ func ParseInt(c echo.Context, paramName string) (int32, error) {
 	}
 	return int32(id), nil
 }
+
+// GetUserLoginHistory - Admin endpoint to view user's login history
+func (s *Server) GetUserLoginHistory(c echo.Context) error {
+	ctx := c.Request().Context()
+	username := c.Param("username")
+
+	if username == "" {
+		return RespondError(c, http.StatusBadRequest, "missing_username",
+			"Username parameter is required.")
+	}
+
+	limit := 50
+	offset := 0
+
+	history, err := s.queries.GetUserLoginHistory(ctx, db.GetUserLoginHistoryParams{
+		Username: username,
+		Limit:    int32(limit),
+		Offset:   int32(offset),
+	})
+
+	if err != nil {
+		return RespondError(c, http.StatusInternalServerError, "db_error",
+			"Failed to retrieve login history.")
+	}
+
+	if history == nil {
+		history = []db.GetUserLoginHistoryRow{}
+	}
+
+	return RespondSuccess(c, http.StatusOK, history)
+}

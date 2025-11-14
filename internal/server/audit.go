@@ -28,9 +28,9 @@ type AuditLogFilter struct {
 }
 
 // logAudit creates an audit log entry
-func (s *Server) logAudit(ctx context.Context, userID uuid.UUID, action, entityType, entityID string, 
+func (s *Server) logAudit(ctx context.Context, userID uuid.UUID, action, entityType, entityID string,
 	oldValues, newValues map[string]any, ipAddress, userAgent string) error {
-	
+
 	var oldJSON, newJSON pqtype.NullRawMessage
 
 	if oldValues != nil {
@@ -71,7 +71,7 @@ func (s *Server) logAudit(ctx context.Context, userID uuid.UUID, action, entityT
 func (s *Server) GetAuditLogs(c echo.Context) error {
 	var filter AuditLogFilter
 	if err := c.Bind(&filter); err != nil {
-		return RespondError(c, http.StatusBadRequest, "invalid_request", 
+		return RespondError(c, http.StatusBadRequest, "invalid_request",
 			"Invalid query parameters.")
 	}
 
@@ -91,7 +91,7 @@ func (s *Server) GetAuditLogs(c echo.Context) error {
 	if filter.UserID != "" {
 		userID, err := uuid.Parse(filter.UserID)
 		if err != nil {
-			return RespondError(c, http.StatusBadRequest, "invalid_user_id", 
+			return RespondError(c, http.StatusBadRequest, "invalid_user_id",
 				"Invalid user ID format.")
 		}
 		logs, err = s.queries.GetAuditLogsByUser(ctx, db.GetAuditLogsByUserParams{
@@ -120,7 +120,7 @@ func (s *Server) GetAuditLogs(c echo.Context) error {
 	}
 
 	if err != nil {
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to retrieve audit logs.")
 	}
 
@@ -163,7 +163,7 @@ func (s *Server) GetAuditLog(c echo.Context) error {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return RespondError(c, http.StatusBadRequest, "invalid_id", 
+		return RespondError(c, http.StatusBadRequest, "invalid_id",
 			"The provided ID is not a valid UUID.")
 	}
 
@@ -171,10 +171,10 @@ func (s *Server) GetAuditLog(c echo.Context) error {
 	log, err := s.queries.GetAuditLog(ctx, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return RespondError(c, http.StatusNotFound, "not_found", 
+			return RespondError(c, http.StatusNotFound, "not_found",
 				"Audit log with the specified ID was not found.")
 		}
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to retrieve audit log.")
 	}
 
@@ -207,7 +207,7 @@ func (s *Server) GetUserActivity(c echo.Context) error {
 	userIDStr := c.Param("user_id")
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
-		return RespondError(c, http.StatusBadRequest, "invalid_user_id", 
+		return RespondError(c, http.StatusBadRequest, "invalid_user_id",
 			"The provided user ID is not a valid UUID.")
 	}
 
@@ -230,7 +230,7 @@ func (s *Server) GetUserActivity(c echo.Context) error {
 		Offset: int32(offset),
 	})
 	if err != nil {
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to retrieve user activity.")
 	}
 
@@ -279,7 +279,7 @@ func (s *Server) GetEntityHistory(c echo.Context) error {
 		Offset:     int32(offset),
 	})
 	if err != nil {
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to retrieve entity history.")
 	}
 
@@ -321,7 +321,7 @@ func (s *Server) GetAuditStats(c echo.Context) error {
 	// Get statistics
 	stats, err := s.queries.GetAuditLogStats(ctx)
 	if err != nil {
-		return RespondError(c, http.StatusInternalServerError, "db_error", 
+		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to retrieve audit statistics.")
 	}
 

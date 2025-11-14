@@ -67,12 +67,11 @@ func (s *Server) registerRoutes() {
 	// ==================== PUBLIC AUTH ENDPOINTS ====================
 	auth := api.Group("/auth")
 	{
-		// Login with special rate limiting
+		// Use enhanced login handler with comprehensive logging
 		if s.queries != nil {
-			auth.POST("/login", s.Login,
-				middleware.LoginRateLimitMiddleware(s.queries, 5, 5*time.Minute))
+			auth.POST("/login", s.LoginEnhanced) // Enhanced version
 		} else {
-			auth.POST("/login", s.Login)
+			auth.POST("/login", s.Login) // Fallback to regular
 		}
 		auth.POST("/refresh", s.RefreshToken)
 	}
@@ -97,6 +96,25 @@ func (s *Server) registerRoutes() {
 		protected.GET("/auth/profile", s.GetProfile)
 		protected.PUT("/auth/password", s.ChangePassword)
 		protected.GET("/auth/check-permission", s.CheckUserPermission)
+	}
+
+	// Add admin security monitoring routes (admin only)
+	security := protected.Group("/security")
+	security.Use(middleware.RequireRole("admin"))
+	{
+		// Login attempt monitoring
+		security.GET("/login-attempts", s.GetLoginAttempts)
+		security.GET("/login-attempts/report", s.GetLoginSecurityReport)
+		security.GET("/blocked-ips", s.GetCurrentlyBlockedIPs)
+
+		// Manual rate limit management
+		security.POST("/release-ip", s.ManuallyReleaseIP)
+
+		// Data cleanup
+		security.POST("/cleanup", s.CleanupOldData)
+
+		// Get user login history
+		security.GET("/user/:username/login-history", s.GetUserLoginHistory)
 	}
 
 	// Product routes (with caching for GET requests)
