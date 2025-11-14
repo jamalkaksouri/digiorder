@@ -1,4 +1,4 @@
-// internal/security/password.go - Enhanced password security
+// internal/security/password.go - FIXED VERSION
 package security
 
 import (
@@ -12,29 +12,28 @@ import (
 const (
 	MinPasswordLength = 12
 	MaxPasswordLength = 128
-	BcryptCost        = 12 // Increased from default 10
+	BcryptCost        = 12
 )
 
 var (
-	ErrPasswordTooShort      = errors.New("password must be at least 12 characters long")
-	ErrPasswordTooLong       = errors.New("password must be less than 128 characters")
-	ErrPasswordNoUppercase   = errors.New("password must contain at least one uppercase letter")
-	ErrPasswordNoLowercase   = errors.New("password must contain at least one lowercase letter")
-	ErrPasswordNoDigit       = errors.New("password must contain at least one digit")
-	ErrPasswordNoSpecial     = errors.New("password must contain at least one special character (!@#$%^&*()_+-=[]{}|;:,.<>?)")
-	ErrPasswordCommon        = errors.New("password is too common and easily guessable")
+	ErrPasswordTooShort    = errors.New("password must be at least 12 characters long")
+	ErrPasswordTooLong     = errors.New("password must be less than 128 characters")
+	ErrPasswordNoUppercase = errors.New("password must contain at least one uppercase letter")
+	ErrPasswordNoLowercase = errors.New("password must contain at least one lowercase letter")
+	ErrPasswordNoDigit     = errors.New("password must contain at least one digit")
+	ErrPasswordNoSpecial   = errors.New("password must contain at least one special character (!@#$%^&*()_+-=[]{}|;:,.<>?)")
+	ErrPasswordCommon      = errors.New("password is too common and easily guessable")
 )
 
 // CommonPasswords - list of commonly used passwords to reject
 var CommonPasswords = map[string]bool{
 	"password123456": true,
-	"123456789012": true,
-	"qwerty123456": true,
-	"admin123456": true,
-	"welcome12345": true,
-	"password1234": true,
-	"letmein12345": true,
-	// Add more common passwords
+	"123456789012":   true,
+	"qwerty123456":   true,
+	"admin123456":    true,
+	"welcome12345":   true,
+	"password1234":   true,
+	"letmein12345":   true,
 }
 
 // PasswordRequirements holds password validation rules
@@ -176,16 +175,21 @@ func PasswordStrength(password string) int {
 	}
 
 	// Complexity patterns (up to 30 points)
-	// No repeated characters
-	if !regexp.MustCompile(`(.)\1{2,}`).MatchString(password) {
+	// FIXED: Use correct regex pattern
+	repeatedPattern := regexp.MustCompile(`(.)\1{2,}`)
+	if !repeatedPattern.MatchString(password) {
 		score += 10
 	}
+
 	// Mix of character types in sequence
-	if regexp.MustCompile(`[a-z][A-Z]|[A-Z][a-z]`).MatchString(password) {
+	mixPattern := regexp.MustCompile(`[a-z][A-Z]|[A-Z][a-z]`)
+	if mixPattern.MatchString(password) {
 		score += 10
 	}
+
 	// Has special characters not at start/end
-	if regexp.MustCompile(`^[a-zA-Z0-9].*[^a-zA-Z0-9].*[a-zA-Z0-9]$`).MatchString(password) {
+	specialPattern := regexp.MustCompile(`^[a-zA-Z0-9].*[^a-zA-Z0-9].*[a-zA-Z0-9]$`)
+	if specialPattern.MatchString(password) {
 		score += 10
 	}
 
@@ -216,7 +220,7 @@ func SuggestPasswordImprovement(password string) []string {
 	var suggestions []string
 
 	if len(password) < MinPasswordLength {
-		suggestions = append(suggestions, 
+		suggestions = append(suggestions,
 			"Increase length to at least 12 characters")
 	}
 
@@ -247,12 +251,13 @@ func SuggestPasswordImprovement(password string) []string {
 		suggestions = append(suggestions, "Add special characters (!@#$%^&*)")
 	}
 
-	if regexp.MustCompile(`(.)\1{2,}`).MatchString(password) {
+	repeatedPattern := regexp.MustCompile(`(.)\1{2,}`)
+	if repeatedPattern.MatchString(password) {
 		suggestions = append(suggestions, "Avoid repeating characters")
 	}
 
 	if CommonPasswords[password] {
-		suggestions = append(suggestions, 
+		suggestions = append(suggestions,
 			"Choose a more unique password - this one is too common")
 	}
 

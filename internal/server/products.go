@@ -1,18 +1,18 @@
+// internal/server/products.go - ENHANCED ERROR HANDLING VERSION
 package server
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strconv"
 
-	"github.com/google/uuid"
 	db "github.com/jamalkaksouri/DigiOrder/internal/db"
 	"github.com/labstack/echo/v4"
 )
 
-// CreateProductReq defines the request body for creating a product
 type CreateProductReq struct {
-	Name         string `json:"name" validate:"required"`
+	Name         string `json:"name" validate:"required,min=1,max=255"`
 	Brand        string `json:"brand,omitempty"`
 	DosageFormID int32  `json:"dosage_form_id" validate:"required,gt=0"`
 	Strength     string `json:"strength,omitempty"`
@@ -21,30 +21,44 @@ type CreateProductReq struct {
 	Description  string `json:"description,omitempty"`
 }
 
-// UpdateProductReq defines the request body for updating a product
 type UpdateProductReq struct {
-	Name         string `json:"name,omitempty"`
+	Name         string `json:"name,omitempty" validate:"omitempty,min=1,max=255"`
 	Brand        string `json:"brand,omitempty"`
-	DosageFormID *int32 `json:"dosage_form_id,omitempty"`
+	DosageFormID *int32 `json:"dosage_form_id,omitempty" validate:"omitempty,gt=0"`
 	Strength     string `json:"strength,omitempty"`
 	Unit         string `json:"unit,omitempty"`
-	CategoryID   *int32 `json:"category_id,omitempty"`
+	CategoryID   *int32 `json:"category_id,omitempty" validate:"omitempty,gt=0"`
 	Description  string `json:"description,omitempty"`
 }
 
 // CreateProduct handles POST /api/v1/products
 func (s *Server) CreateProduct(c echo.Context) error {
 	var req CreateProductReq
-	if err := c.Bind(&req); err != nil {
-		return RespondError(c, http.StatusBadRequest, "invalid_request", "The request body is not valid.")
-	}
-
-	// Validate request
-	if err := s.validator.Struct(req); err != nil {
-		return RespondError(c, http.StatusBadRequest, "validation_error", err.Error())
+	if err := s.ValidateRequest(c, &req); err != nil {
+		return err
 	}
 
 	ctx := c.Request().Context()
+
+	// Verify dosage form exists
+	_, err := s.queries.GetDosageForm(ctx, req.DosageFormID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return RespondError(c, http.StatusBadRequest, "invalid_dosage_form",
+				fmt.Sprintf("Dosage form with ID %d does not exist.", req.DosageFormID))
+		}
+		return HandleDatabaseError(c, err, "Dosage Form")
+	}
+
+	// Verify category exists
+	_, err = s.queries.GetCategory(ctx, req.CategoryID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return RespondError(c, http.StatusBadRequest, "invalid_category",
+				fmt.Sprintf("Category with ID %d does not exist.", req.CategoryID))
+		}
+		return HandleDatabaseError(c, err, "Category")
+	}
 
 	// Create product
 	product, err := s.queries.CreateProduct(ctx, db.CreateProductParams{
@@ -57,7 +71,7 @@ func (s *Server) CreateProduct(c echo.Context) error {
 		Description:  sql.NullString{String: req.Description, Valid: req.Description != ""},
 	})
 	if err != nil {
-		return RespondError(c, http.StatusInternalServerError, "db_error", "Failed to create product.")
+		return HandleDatabaseError(c, err, "Product")
 	}
 
 	return RespondSuccess(c, http.StatusCreated, product)
@@ -67,29 +81,47 @@ func (s *Server) CreateProduct(c echo.Context) error {
 func (s *Server) ListProducts(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	// Parse pagination parameters
-	limitStr := c.QueryParam("limit")
-	offsetStr := c.QueryParam("offset")
+	limit := 50
+	offset := 0
 
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		limit = 50
-	}
-	offset, err := strconv.Atoi(offsetStr)
-	if err != nil || offset < 0 {
-		offset = 0
+	if limitStr := c.QueryParam("limit"); limitStr != "" {
+		parsedLimit, err := strconv.Atoi(limitStr)
+		if err != nil {
+			return RespondError(c, http.StatusBadRequest, "invalid_limit",
+				"Limit parameter must be a valid number.")
+		}
+		if parsedLimit <= 0 {
+			return RespondError(c, http.StatusBadRequest, "invalid_limit",
+				"Limit must be greater than 0.")
+		}
+		if parsedLimit > 100 {
+			return RespondError(c, http.StatusBadRequest, "invalid_limit",
+				"Limit cannot exceed 100.")
+		}
+		limit = parsedLimit
 	}
 
-	// Fetch products
+	if offsetStr := c.QueryParam("offset"); offsetStr != "" {
+		parsedOffset, err := strconv.Atoi(offsetStr)
+		if err != nil {
+			return RespondError(c, http.StatusBadRequest, "invalid_offset",
+				"Offset parameter must be a valid number.")
+		}
+		if parsedOffset < 0 {
+			return RespondError(c, http.StatusBadRequest, "invalid_offset",
+				"Offset cannot be negative.")
+		}
+		offset = parsedOffset
+	}
+
 	products, err := s.queries.ListProducts(ctx, db.ListProductsParams{
 		Limit:  int32(limit),
 		Offset: int32(offset),
 	})
 	if err != nil {
-		return RespondError(c, http.StatusInternalServerError, "db_error", "Failed to fetch products.")
+		return HandleDatabaseError(c, err, "Products")
 	}
 
-	// Return empty array instead of null
 	if products == nil {
 		products = []db.Product{}
 	}
@@ -99,19 +131,21 @@ func (s *Server) ListProducts(c echo.Context) error {
 
 // GetProduct handles GET /api/v1/products/:id
 func (s *Server) GetProduct(c echo.Context) error {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
+	id, err := ParseUUID(c, "id")
 	if err != nil {
-		return RespondError(c, http.StatusBadRequest, "invalid_id", "The provided ID is not a valid UUID.")
+		return err
 	}
 
 	ctx := c.Request().Context()
 	product, err := s.queries.GetProduct(ctx, id)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return RespondError(c, http.StatusNotFound, "not_found", "Product with the specified ID was not found.")
-		}
-		return RespondError(c, http.StatusInternalServerError, "db_error", "Failed to retrieve product.")
+		return HandleDatabaseError(c, err, "Product")
+	}
+
+	// Check if product is deleted
+	if product.DeletedAt.Valid {
+		return RespondError(c, http.StatusNotFound, "not_found",
+			"Product has been deleted and is no longer available.")
 	}
 
 	return RespondSuccess(c, http.StatusOK, product)
@@ -119,23 +153,62 @@ func (s *Server) GetProduct(c echo.Context) error {
 
 // UpdateProduct handles PUT /api/v1/products/:id
 func (s *Server) UpdateProduct(c echo.Context) error {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
+	id, err := ParseUUID(c, "id")
 	if err != nil {
-		return RespondError(c, http.StatusBadRequest, "invalid_id", "The provided ID is not a valid UUID.")
+		return err
 	}
 
 	var req UpdateProductReq
-	if err := c.Bind(&req); err != nil {
-		return RespondError(c, http.StatusBadRequest, "invalid_request", "The request body is not valid.")
+	if err := s.ValidateRequest(c, &req); err != nil {
+		return err
 	}
 
 	ctx := c.Request().Context()
 
+	// Verify product exists
+	existingProduct, err := s.queries.GetProduct(ctx, id)
+	if err != nil {
+		return HandleDatabaseError(c, err, "Product")
+	}
+
+	if existingProduct.DeletedAt.Valid {
+		return RespondError(c, http.StatusNotFound, "not_found",
+			"Product has been deleted and cannot be updated.")
+	}
+
+	// Verify dosage form if provided
+	if req.DosageFormID != nil {
+		_, err := s.queries.GetDosageForm(ctx, *req.DosageFormID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return RespondError(c, http.StatusBadRequest, "invalid_dosage_form",
+					fmt.Sprintf("Dosage form with ID %d does not exist.", *req.DosageFormID))
+			}
+			return HandleDatabaseError(c, err, "Dosage Form")
+		}
+	}
+
+	// Verify category if provided
+	if req.CategoryID != nil {
+		_, err := s.queries.GetCategory(ctx, *req.CategoryID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return RespondError(c, http.StatusBadRequest, "invalid_category",
+					fmt.Sprintf("Category with ID %d does not exist.", *req.CategoryID))
+			}
+			return HandleDatabaseError(c, err, "Category")
+		}
+	}
+
 	// Build update params
 	params := db.UpdateProductParams{
-		ID:   id,
-		Name: req.Name,
+		ID: id,
+	}
+
+	if req.Name != "" {
+		params.Name = req.Name
+	} else {
+		params.Name = existingProduct.Name
 	}
 
 	if req.Brand != "" {
@@ -159,10 +232,7 @@ func (s *Server) UpdateProduct(c echo.Context) error {
 
 	product, err := s.queries.UpdateProduct(ctx, params)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return RespondError(c, http.StatusNotFound, "not_found", "Product with the specified ID was not found.")
-		}
-		return RespondError(c, http.StatusInternalServerError, "db_error", "Failed to update product.")
+		return HandleDatabaseError(c, err, "Product")
 	}
 
 	return RespondSuccess(c, http.StatusOK, product)
@@ -170,16 +240,27 @@ func (s *Server) UpdateProduct(c echo.Context) error {
 
 // DeleteProduct handles DELETE /api/v1/products/:id
 func (s *Server) DeleteProduct(c echo.Context) error {
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
+	id, err := ParseUUID(c, "id")
 	if err != nil {
-		return RespondError(c, http.StatusBadRequest, "invalid_id", "The provided ID is not a valid UUID.")
+		return err
 	}
 
 	ctx := c.Request().Context()
+
+	// Verify product exists
+	product, err := s.queries.GetProduct(ctx, id)
+	if err != nil {
+		return HandleDatabaseError(c, err, "Product")
+	}
+
+	if product.DeletedAt.Valid {
+		return RespondError(c, http.StatusNotFound, "not_found",
+			"Product has already been deleted.")
+	}
+
 	err = s.queries.DeleteProduct(ctx, id)
 	if err != nil {
-		return RespondError(c, http.StatusInternalServerError, "db_error", "Failed to delete product.")
+		return HandleDatabaseError(c, err, "Product")
 	}
 
 	return c.NoContent(http.StatusNoContent)
@@ -189,19 +270,42 @@ func (s *Server) DeleteProduct(c echo.Context) error {
 func (s *Server) SearchProducts(c echo.Context) error {
 	query := c.QueryParam("q")
 	if query == "" {
-		return RespondError(c, http.StatusBadRequest, "missing_query", "Search query parameter 'q' is required.")
+		return RespondError(c, http.StatusBadRequest, "missing_query",
+			"Search query parameter 'q' is required.")
 	}
 
-	limitStr := c.QueryParam("limit")
-	offsetStr := c.QueryParam("offset")
-
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		limit = 50
+	if len(query) < 2 {
+		return RespondError(c, http.StatusBadRequest, "query_too_short",
+			"Search query must be at least 2 characters long.")
 	}
-	offset, err := strconv.Atoi(offsetStr)
-	if err != nil || offset < 0 {
-		offset = 0
+
+	limit := 50
+	offset := 0
+
+	if limitStr := c.QueryParam("limit"); limitStr != "" {
+		parsedLimit, err := strconv.Atoi(limitStr)
+		if err != nil {
+			return RespondError(c, http.StatusBadRequest, "invalid_limit",
+				"Limit parameter must be a valid number.")
+		}
+		if parsedLimit <= 0 || parsedLimit > 100 {
+			return RespondError(c, http.StatusBadRequest, "invalid_limit",
+				"Limit must be between 1 and 100.")
+		}
+		limit = parsedLimit
+	}
+
+	if offsetStr := c.QueryParam("offset"); offsetStr != "" {
+		parsedOffset, err := strconv.Atoi(offsetStr)
+		if err != nil {
+			return RespondError(c, http.StatusBadRequest, "invalid_offset",
+				"Offset parameter must be a valid number.")
+		}
+		if parsedOffset < 0 {
+			return RespondError(c, http.StatusBadRequest, "invalid_offset",
+				"Offset cannot be negative.")
+		}
+		offset = parsedOffset
 	}
 
 	ctx := c.Request().Context()
@@ -211,7 +315,7 @@ func (s *Server) SearchProducts(c echo.Context) error {
 		Offset:  int32(offset),
 	})
 	if err != nil {
-		return RespondError(c, http.StatusInternalServerError, "db_error", "Failed to search products.")
+		return HandleDatabaseError(c, err, "Products")
 	}
 
 	if products == nil {
