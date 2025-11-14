@@ -1,4 +1,3 @@
-// internal/server/auth_enhanced.go - Enhanced authentication with comprehensive logging
 package server
 
 import (
@@ -17,19 +16,14 @@ import (
 
 // parseUserAgent extracts device information from user agent string
 func parseUserAgent(userAgent string) map[string]interface{} {
-	// Simple parsing - can be enhanced with a library like github.com/mssola/user_agent
 	deviceInfo := map[string]interface{}{
 		"raw": userAgent,
 	}
 
-	// Basic detection
 	if len(userAgent) > 0 {
-		// Detect common patterns
 		deviceInfo["is_mobile"] = false
 		deviceInfo["is_desktop"] = true
 		deviceInfo["browser"] = "unknown"
-
-		// You can add more sophisticated parsing here
 	}
 
 	return deviceInfo
@@ -42,9 +36,8 @@ func (s *Server) logLoginAttempt(c echo.Context, username string, success bool,
 	ctx := c.Request().Context()
 	ipAddress := c.RealIP()
 	userAgent := c.Request().UserAgent()
-	sessionID := c.Request().Header.Get("X-Session-ID") // If you use session tracking
+	sessionID := c.Request().Header.Get("X-Session-ID")
 
-	// Parse device info
 	deviceInfo := parseUserAgent(userAgent)
 	deviceInfoJSON, _ := json.Marshal(deviceInfo)
 
@@ -54,7 +47,7 @@ func (s *Server) logLoginAttempt(c echo.Context, username string, success bool,
 		UserAgent:     sql.NullString{String: userAgent, Valid: userAgent != ""},
 		Success:       success,
 		FailureReason: sql.NullString{String: failureReason, Valid: failureReason != ""},
-		RateLimited:   rateLimited,
+		RateLimited:   sql.NullBool{Bool: rateLimited, Valid: true},
 		SessionID:     sql.NullString{String: sessionID, Valid: sessionID != ""},
 		DeviceInfo:    pqtype.NullRawMessage{RawMessage: deviceInfoJSON, Valid: true},
 	})
@@ -63,15 +56,16 @@ func (s *Server) logLoginAttempt(c echo.Context, username string, success bool,
 }
 
 // checkAndLogRateLimit checks if IP is rate limited and logs accordingly
+// FIXED: Changed return type and parameter types
 func (s *Server) checkAndLogRateLimit(c echo.Context, username string) (bool, error) {
 	ctx := c.Request().Context()
 	clientIP := c.RealIP()
-	windowStart := time.Now().Add(-5 * time.Minute)
+	windowStart := time.Now().Add(-5 * time.Minute) // Changed from sql.NullTime
 
-	// Count recent login attempts
-	count, err := s.queries.CountLoginAttempts(ctx, db.CountLoginAttemptsParams{
-		ClientID:    clientIP,
-		WindowStart: windowStart,
+	// FIXED: Use time.Time instead of sql.NullTime
+	count, err := s.queries.CountFailedAttempts(ctx, db.CountFailedAttemptsParams{
+		IpAddress: clientIP,
+		Since:     sql.NullTime{Time: windowStart, Valid: true},
 	})
 
 	if err != nil {
@@ -81,7 +75,6 @@ func (s *Server) checkAndLogRateLimit(c echo.Context, username string) (bool, er
 	isRateLimited := count >= 5
 
 	if isRateLimited {
-		// Log the rate-limited attempt
 		s.logLoginAttempt(c, username, false, "rate_limited", true)
 	}
 
@@ -89,6 +82,7 @@ func (s *Server) checkAndLogRateLimit(c echo.Context, username string) (bool, er
 }
 
 // logRateLimitRelease logs when a user is released from rate limiting
+// FIXED: Changed BlockDuration type to sql.NullInt64
 func (s *Server) logRateLimitRelease(c echo.Context, clientID, ipAddress, username string,
 	blockedAt time.Time, releasedBy string, adminUserID *uuid.UUID,
 	attemptsCount int, releaseReason string) error {
@@ -101,6 +95,7 @@ func (s *Server) logRateLimitRelease(c echo.Context, clientID, ipAddress, userna
 		adminID = uuid.NullUUID{UUID: *adminUserID, Valid: true}
 	}
 
+	// FIXED: Convert duration to int64 (seconds)
 	_, err := s.queries.LogRateLimitRelease(ctx, db.LogRateLimitReleaseParams{
 		ClientID:         clientID,
 		IpAddress:        ipAddress,
@@ -108,23 +103,22 @@ func (s *Server) logRateLimitRelease(c echo.Context, clientID, ipAddress, userna
 		BlockedAt:        blockedAt,
 		ReleasedBy:       releasedBy,
 		ReleasedByUserID: adminID,
-		BlockDuration:    sql.NullString{String: blockDuration.String(), Valid: true},
+		BlockDuration:    sql.NullInt64{Int64: int64(blockDuration.Seconds()), Valid: true}, // FIXED
 		AttemptsCount:    sql.NullInt32{Int32: int32(attemptsCount), Valid: true},
 		ReleaseReason:    sql.NullString{String: releaseReason, Valid: releaseReason != ""},
 	})
 
 	if err == nil {
-		// Update all rate-limited attempts for this IP
 		s.queries.UpdateLoginAttemptRelease(ctx, db.UpdateLoginAttemptReleaseParams{
 			IpAddress:  ipAddress,
-			ReleasedBy: releasedBy,
+			ReleasedBy: sql.NullString{String: releasedBy, Valid: true},
 		})
 	}
 
 	return err
 }
 
-// Enhanced login handler with comprehensive logging
+// LoginEnhanced - Enhanced login handler with comprehensive logging
 func (s *Server) LoginEnhanced(c echo.Context) error {
 	var req LoginRequest
 	if err := c.Bind(&req); err != nil {
@@ -143,7 +137,6 @@ func (s *Server) LoginEnhanced(c echo.Context) error {
 	// Check rate limiting BEFORE attempting authentication
 	isRateLimited, err := s.checkAndLogRateLimit(c, req.Username)
 	if err != nil {
-		// Log error but don't fail the request
 		if s.logger != nil {
 			s.logger.Error("Failed to check rate limit", err, nil)
 		}
@@ -195,16 +188,15 @@ func (s *Server) LoginEnhanced(c echo.Context) error {
 	// Log successful login
 	s.logLoginAttempt(c, req.Username, true, "", false)
 
-	// Check if user was previously rate limited and log the automatic release
+	// FIXED: Use CountFailedAttempts instead of CountLoginAttempts
 	clientIP := c.RealIP()
 	windowStart := time.Now().Add(-5 * time.Minute)
-	count, _ := s.queries.CountLoginAttempts(ctx, db.CountLoginAttemptsParams{
-		ClientID:    clientIP,
-		WindowStart: windowStart,
+	count, _ := s.queries.CountFailedAttempts(ctx, db.CountFailedAttemptsParams{
+		IpAddress: clientIP,
+		Since:     sql.NullTime{Time: windowStart, Valid: true},
 	})
 
 	if count > 0 {
-		// User had previous attempts, log the successful authentication as a release
 		s.logRateLimitRelease(c, clientIP, clientIP, req.Username,
 			time.Now().Add(-5*time.Minute), "automatic_expiry", nil,
 			int(count), "successful_authentication")
@@ -241,13 +233,13 @@ func (s *Server) GetLoginAttempts(c echo.Context) error {
 	if ipAddress != "" {
 		attempts, err = s.queries.GetRecentLoginAttempts(ctx, db.GetRecentLoginAttemptsParams{
 			IpAddress: ipAddress,
-			Since:     time.Now().Add(-24 * time.Hour),
+			Since:     sql.NullTime{Time: time.Now().Add(-24 * time.Hour), Valid: true},
 			Limit:     int32(limit),
 		})
 	} else if username != "" {
 		attempts, err = s.queries.GetLoginAttemptsByUsername(ctx, db.GetLoginAttemptsByUsernameParams{
 			Username: username,
-			Since:    time.Now().Add(-24 * time.Hour),
+			Since:    sql.NullTime{Time: time.Now().Add(-24 * time.Hour), Valid: true},
 			Limit:    int32(limit),
 		})
 	} else {
@@ -316,20 +308,17 @@ func (s *Server) ManuallyReleaseIP(c echo.Context) error {
 		return err
 	}
 
-	// Get current user (admin)
 	adminUserID, err := middleware.GetUserIDFromContext(c)
 	if err != nil {
 		return err
 	}
 
-	// Delete rate limit records
 	err = s.queries.ManuallyReleaseRateLimit(ctx, req.IPAddress)
 	if err != nil {
 		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to release IP from rate limiting.")
 	}
 
-	// Log the manual release
 	s.logRateLimitRelease(c, req.IPAddress, req.IPAddress, "",
 		time.Now().Add(-5*time.Minute), "manual_admin", &adminUserID,
 		0, req.ReleaseReason)
@@ -340,18 +329,16 @@ func (s *Server) ManuallyReleaseIP(c echo.Context) error {
 	})
 }
 
-// CleanupOldData - Admin endpoint to trigger cleanup (can be called via cron)
+// CleanupOldData - Admin endpoint to trigger cleanup
 func (s *Server) CleanupOldData(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	// Archive old rate limits
 	err := s.queries.ArchiveOldRateLimits(ctx)
 	if err != nil {
 		return RespondError(c, http.StatusInternalServerError, "db_error",
 			"Failed to archive rate limits.")
 	}
 
-	// Cleanup old login attempts
 	err = s.queries.CleanupOldLoginAttempts(ctx)
 	if err != nil {
 		return RespondError(c, http.StatusInternalServerError, "db_error",
