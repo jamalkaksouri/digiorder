@@ -265,9 +265,28 @@ func (s *Server) customHTTPErrorHandler(err error, c echo.Context) {
 		details = err.Error()
 	}
 
-	// Don't log 404 errors as they're expected
-	if code != http.StatusNotFound {
-		s.router.Logger.Error(err)
+	// Enhanced logging with context
+	if code >= 500 {
+		if s.logger != nil {
+			s.logger.Error("Server error", err, map[string]any{
+				"status_code": code,
+				"path":        c.Request().URL.Path,
+				"method":      c.Request().Method,
+				"client_ip":   c.RealIP(),
+				"user_agent":  c.Request().UserAgent(),
+			})
+		} else {
+			s.router.Logger.Errorf("Server error [%d]: %v", code, err)
+		}
+	} else if code >= 400 && code < 500 {
+		// Log client errors at debug level
+		if s.logger != nil {
+			s.logger.Debug("Client error", map[string]any{
+				"status_code": code,
+				"path":        c.Request().URL.Path,
+				"error":       msg,
+			})
+		}
 	}
 
 	if !c.Response().Committed {

@@ -89,7 +89,16 @@ func (s *Server) Login(c echo.Context) error {
 	var roleName string
 	if user.RoleID.Valid {
 		role, err := s.queries.GetRole(ctx, user.RoleID.Int32)
-		if err == nil {
+		if err != nil {
+			// Log but don't fail the login
+			if s.logger != nil {
+				s.logger.Error("Failed to fetch role name", err, map[string]any{
+					"user_id": user.ID,
+					"role_id": user.RoleID.Int32,
+				})
+			}
+			roleName = "unknown" // Graceful degradation
+		} else {
 			roleName = role.Name
 		}
 	}

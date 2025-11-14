@@ -60,20 +60,25 @@ func (s *Server) logLoginAttempt(c echo.Context, username string, success bool,
 func (s *Server) checkAndLogRateLimit(c echo.Context, username string) (bool, error) {
 	ctx := c.Request().Context()
 	clientIP := c.RealIP()
-	windowStart := time.Now().Add(-5 * time.Minute) // Changed from sql.NullTime
+	windowStart := time.Now().Add(-5 * time.Minute)
 
-	// FIXED: Use time.Time instead of sql.NullTime
 	count, err := s.queries.CountFailedAttempts(ctx, db.CountFailedAttemptsParams{
 		IpAddress: clientIP,
 		Since:     sql.NullTime{Time: windowStart, Valid: true},
 	})
 
 	if err != nil {
-		return false, err
+		// Log error but fail-open (allow request) to prevent outage
+		if s.logger != nil {
+			s.logger.Error("Rate limit check failed, allowing request", err, map[string]any{
+				"client_ip": clientIP,
+				"username":  username,
+			})
+		}
+		return false, nil // Fail-open: allow request
 	}
 
 	isRateLimited := count >= 5
-
 	if isRateLimited {
 		s.logLoginAttempt(c, username, false, "rate_limited", true)
 	}

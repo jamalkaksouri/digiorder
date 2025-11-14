@@ -2,10 +2,12 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	db "github.com/jamalkaksouri/DigiOrder/internal/db"
 	"github.com/labstack/echo/v4"
@@ -60,7 +62,10 @@ func (s *Server) CreateProduct(c echo.Context) error {
 		return HandleDatabaseError(c, err, "Category")
 	}
 
-	// Create product
+	// Create timeout context for DB operations
+	ctx, cancel := context.WithTimeout(c.Request().Context(), 5*time.Second)
+	defer cancel()
+
 	product, err := s.queries.CreateProduct(ctx, db.CreateProductParams{
 		Name:         req.Name,
 		Brand:        sql.NullString{String: req.Brand, Valid: req.Brand != ""},
@@ -71,6 +76,11 @@ func (s *Server) CreateProduct(c echo.Context) error {
 		Description:  sql.NullString{String: req.Description, Valid: req.Description != ""},
 	})
 	if err != nil {
+		// Check if timeout
+		if ctx.Err() == context.DeadlineExceeded {
+			return RespondError(c, http.StatusGatewayTimeout, "database_timeout",
+				"Database operation timed out. Please try again.")
+		}
 		return HandleDatabaseError(c, err, "Product")
 	}
 
@@ -133,19 +143,22 @@ func (s *Server) ListProducts(c echo.Context) error {
 func (s *Server) GetProduct(c echo.Context) error {
 	id, err := ParseUUID(c, "id")
 	if err != nil {
-		return err
+		return err // Already formatted
 	}
 
-	ctx := c.Request().Context()
+	ctx, cancel := context.WithTimeout(c.Request().Context(), 5*time.Second)
+	defer cancel()
+
 	product, err := s.queries.GetProduct(ctx, id)
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return ErrDatabaseTimeout.Send(c)
+		}
 		return HandleDatabaseError(c, err, "Product")
 	}
 
-	// Check if product is deleted
 	if product.DeletedAt.Valid {
-		return RespondError(c, http.StatusNotFound, "not_found",
-			"Product has been deleted and is no longer available.")
+		return ErrNotFound.WithDetails("Product has been deleted").Send(c)
 	}
 
 	return RespondSuccess(c, http.StatusOK, product)

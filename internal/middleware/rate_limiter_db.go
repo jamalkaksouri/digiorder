@@ -239,3 +239,4 @@ func LoginRateLimitMiddleware(queries *db.Queries, maxAttempts int, window time.
 		}
 	}
 }
+

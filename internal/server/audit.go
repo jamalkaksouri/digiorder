@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	db "github.com/jamalkaksouri/DigiOrder/internal/db"
@@ -28,43 +29,43 @@ type AuditLogFilter struct {
 }
 
 // logAudit creates an audit log entry
-func (s *Server) logAudit(ctx context.Context, userID uuid.UUID, action, entityType, entityID string,
-	oldValues, newValues map[string]any, ipAddress, userAgent string) error {
+func (s *Server) logAudit(_ context.Context, userID uuid.UUID, action, entityType, entityID string,
+	oldValues, newValues map[string]any, ipAddress, userAgent string) {
 
-	var oldJSON, newJSON pqtype.NullRawMessage
+	// Make async to not block request
+	go func() {
+		asyncCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
-	if oldValues != nil {
-		data, err := json.Marshal(oldValues)
-		if err == nil {
-			oldJSON = pqtype.NullRawMessage{
-				RawMessage: data,
-				Valid:      true,
-			}
+		var oldJSON, newJSON pqtype.NullRawMessage
+		if oldValues != nil {
+			data, _ := json.Marshal(oldValues)
+			oldJSON = pqtype.NullRawMessage{RawMessage: data, Valid: true}
 		}
-	}
-
-	if newValues != nil {
-		data, err := json.Marshal(newValues)
-		if err == nil {
-			newJSON = pqtype.NullRawMessage{
-				RawMessage: data,
-				Valid:      true,
-			}
+		if newValues != nil {
+			data, _ := json.Marshal(newValues)
+			newJSON = pqtype.NullRawMessage{RawMessage: data, Valid: true}
 		}
-	}
 
-	_, err := s.queries.CreateAuditLog(ctx, db.CreateAuditLogParams{
-		UserID:     uuid.NullUUID{UUID: userID, Valid: true},
-		Action:     action,
-		EntityType: entityType,
-		EntityID:   entityID,
-		OldValues:  oldJSON,
-		NewValues:  newJSON,
-		IpAddress:  sql.NullString{String: ipAddress, Valid: true},
-		UserAgent:  sql.NullString{String: userAgent, Valid: true},
-	})
+		_, err := s.queries.CreateAuditLog(asyncCtx, db.CreateAuditLogParams{
+			UserID:     uuid.NullUUID{UUID: userID, Valid: true},
+			Action:     action,
+			EntityType: entityType,
+			EntityID:   entityID,
+			OldValues:  oldJSON,
+			NewValues:  newJSON,
+			IpAddress:  sql.NullString{String: ipAddress, Valid: true},
+			UserAgent:  sql.NullString{String: userAgent, Valid: true},
+		})
 
-	return err
+		if err != nil && s.logger != nil {
+			s.logger.Error("Failed to create audit log", err, map[string]any{
+				"action":      action,
+				"entity_type": entityType,
+				"entity_id":   entityID,
+			})
+		}
+	}()
 }
 
 // GetAuditLogs handles GET /api/v1/audit-logs
