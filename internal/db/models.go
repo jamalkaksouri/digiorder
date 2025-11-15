@@ -12,6 +12,18 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+// Shows all currently active IP bans with time remaining
+type ActiveIpBan struct {
+	IpAddress        string
+	BannedAt         time.Time
+	BannedUntil      time.Time
+	Reason           string
+	FailedAttempts   sql.NullInt32
+	Endpoint         sql.NullString
+	SecondsRemaining int32
+	MinutesRemaining int32
+}
+
 type ApiRateLimit struct {
 	ID                  uuid.UUID
 	ClientID            string
@@ -62,6 +74,38 @@ type CurrentlyBlockedIp struct {
 type DosageForm struct {
 	ID   int32
 	Name string
+}
+
+// Tracks temporarily banned IPs with automatic expiry and cleanup. Records are automatically removed after ban expires and retained for 30 days for auditing.
+type IpBan struct {
+	ID             uuid.UUID
+	IpAddress      string
+	BannedAt       time.Time
+	BannedUntil    time.Time
+	Reason         string
+	FailedAttempts sql.NullInt32
+	Endpoint       sql.NullString
+	BannedBy       sql.NullString
+	ReleasedAt     sql.NullTime
+	ReleasedBy     sql.NullString
+	AutoReleased   sql.NullBool
+	CreatedAt      sql.NullTime
+}
+
+type IpBanCleanupLog struct {
+	ID             int32
+	LastCleanup    sql.NullTime
+	RecordsCleaned sql.NullInt32
+}
+
+// Hourly statistics of IP bans for the last 24 hours
+type IpBanStat struct {
+	Hour              int64
+	TotalBans         int64
+	UniqueIps         int64
+	AvgAttempts       float64
+	AutoReleasedCount int64
+	ManualBans        int64
 }
 
 type LoginAttemptStat struct {

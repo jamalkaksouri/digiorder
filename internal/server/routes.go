@@ -1,4 +1,4 @@
-// internal/server/routes.go - FIXED VERSION
+// internal/server/routes.go - UPDATED VERSION
 package server
 
 import (
@@ -13,6 +13,9 @@ import (
 )
 
 func (s *Server) registerRoutes() {
+	// Initialize enhanced rate limiter with IP ban tracking
+	rateLimiter := middleware.NewEnhancedRateLimiter(s.queries, 100, 200)
+
 	// Initialize metrics collector
 	metricsCollector := middleware.NewMetricsCollector()
 
@@ -34,11 +37,6 @@ func (s *Server) registerRoutes() {
 
 	// Public endpoints (NO AUTH REQUIRED)
 	s.router.GET("/health", s.healthCheck)
-	s.router.GET("/metrics", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, metricsCollector.GetMetrics())
-	})
-
-	// Prometheus metrics endpoint
 	s.router.GET("/metrics", echo.WrapHandler(promhttp.Handler()))
 
 	// Structured logging middleware
@@ -49,13 +47,8 @@ func (s *Server) registerRoutes() {
 	// Secure CORS
 	s.router.Use(middleware.SecureCORSMiddleware())
 
-	// Persistent rate limiting
-	if s.rateLimiter != nil && s.queries != nil {
-		s.router.Use(middleware.PersistentRateLimitMiddleware(
-			s.queries,
-			middleware.DefaultRateLimitConfig(),
-		))
-	}
+	// PRODUCTION RATE LIMITING - Apply to all routes
+	s.router.Use(middleware.ProductionRateLimitMiddleware(s.queries))
 
 	// Observability middleware
 	s.router.Use(middleware.PrometheusMiddleware())
@@ -67,12 +60,8 @@ func (s *Server) registerRoutes() {
 	// ==================== PUBLIC AUTH ENDPOINTS ====================
 	auth := api.Group("/auth")
 	{
-		// Use enhanced login handler with comprehensive logging
-		if s.queries != nil {
-			auth.POST("/login", s.LoginEnhanced) // Enhanced version
-		} else {
-			auth.POST("/login", s.Login) // Fallback to regular
-		}
+		// Use consolidated auth handler (now includes comprehensive logging)
+		auth.POST("/login", s.Login)
 		auth.POST("/refresh", s.RefreshToken)
 	}
 
@@ -88,9 +77,6 @@ func (s *Server) registerRoutes() {
 	protected := api.Group("")
 	protected.Use(middleware.JWTMiddleware())
 
-	// API key rate limiting for authenticated users
-	protected.Use(middleware.APIKeyRateLimitMiddleware(1000))
-
 	// Auth profile endpoints (require authentication)
 	{
 		protected.GET("/auth/profile", s.GetProfile)
@@ -98,7 +84,7 @@ func (s *Server) registerRoutes() {
 		protected.GET("/auth/check-permission", s.CheckUserPermission)
 	}
 
-	// Add admin security monitoring routes (admin only)
+	// Admin security monitoring routes (admin only)
 	security := protected.Group("/security")
 	security.Use(middleware.RequireRole("admin"))
 	{
@@ -106,6 +92,10 @@ func (s *Server) registerRoutes() {
 		security.GET("/login-attempts", s.GetLoginAttempts)
 		security.GET("/login-attempts/report", s.GetLoginSecurityReport)
 		security.GET("/blocked-ips", s.GetCurrentlyBlockedIPs)
+
+		// NEW: IP ban management
+		security.GET("/banned-ips", middleware.GetBannedIPsHandler(rateLimiter))
+		security.POST("/unban-ip", middleware.UnbanIPHandler(rateLimiter))
 
 		// Manual rate limit management
 		security.POST("/release-ip", s.ManuallyReleaseIP)
@@ -241,7 +231,7 @@ func (s *Server) healthCheck(c echo.Context) error {
 		"status":   "healthy",
 		"service":  "DigiOrder API",
 		"database": "connected",
-		"version":  "3.0.0",
+		"version":  "3.0.1",
 	})
 }
 
