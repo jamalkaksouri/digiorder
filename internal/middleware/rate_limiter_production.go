@@ -10,6 +10,7 @@ import (
 
 	db "github.com/jamalkaksouri/DigiOrder/internal/db"
 	"github.com/labstack/echo/v4"
+	"github.com/sqlc-dev/pqtype"
 	"golang.org/x/time/rate"
 )
 
@@ -93,7 +94,9 @@ func (m *IPBanManager) BanIP(ip, reason string, duration time.Duration, attempts
 				FailureReason: sql.NullString{String: reason, Valid: true},
 				RateLimited:   sql.NullBool{Bool: true, Valid: true},
 				SessionID:     sql.NullString{String: "ban_" + time.Now().Format("20060102150405"), Valid: true},
-				DeviceInfo:    sql.NullRawMessage{},
+				DeviceInfo: pqtype.NullRawMessage{
+					Valid: true,
+				},
 			})
 			if err != nil {
 				// Log error but don't fail
@@ -140,7 +143,7 @@ func (m *IPBanManager) cleanupExpiredBans() {
 	for range m.ticker.C {
 		m.mu.Lock()
 		now := time.Now()
-		
+
 		for ip, ban := range m.bans {
 			ban.mu.RLock()
 			if now.After(ban.BannedUntil) {
@@ -148,7 +151,7 @@ func (m *IPBanManager) cleanupExpiredBans() {
 			}
 			ban.mu.RUnlock()
 		}
-		
+
 		m.mu.Unlock()
 	}
 }
@@ -200,10 +203,10 @@ func (rl *EnhancedRateLimiter) CheckRateLimit(c echo.Context, endpoint string) e
 	// Check if IP is banned first
 	if banned, remaining := rl.banManager.IsBanned(clientIP); banned {
 		RecordRateLimitExceeded(endpoint)
-		
+
 		minutes := int(remaining.Minutes())
 		seconds := int(remaining.Seconds()) % 60
-		
+
 		return echo.NewHTTPError(http.StatusTooManyRequests, map[string]any{
 			"error":   "ip_temporarily_banned",
 			"message": "Your IP has been temporarily banned due to too many failed requests",
@@ -222,22 +225,22 @@ func (rl *EnhancedRateLimiter) CheckRateLimit(c echo.Context, endpoint string) e
 	limiter := rl.GetLimiter(clientIP)
 	if !limiter.Allow() {
 		RecordRateLimitExceeded(endpoint)
-		
+
 		// Check if this is a login endpoint - stricter enforcement
 		if endpoint == "/api/v1/auth/login" {
 			// Check failed attempts in last 5 minutes
 			ctx := c.Request().Context()
 			windowStart := time.Now().Add(-5 * time.Minute)
-			
+
 			count, err := rl.queries.CountFailedAttempts(ctx, db.CountFailedAttemptsParams{
 				IpAddress: clientIP,
 				Since:     sql.NullTime{Time: windowStart, Valid: true},
 			})
-			
+
 			if err == nil && count >= 5 {
 				// Ban for 5 minutes
 				rl.banManager.BanIP(clientIP, "too_many_failed_logins", 5*time.Minute, int(count))
-				
+
 				return echo.NewHTTPError(http.StatusTooManyRequests, map[string]any{
 					"error":   "ip_banned",
 					"message": "Too many failed login attempts. Your IP has been banned for 5 minutes.",
@@ -249,7 +252,7 @@ func (rl *EnhancedRateLimiter) CheckRateLimit(c echo.Context, endpoint string) e
 				})
 			}
 		}
-		
+
 		return echo.NewHTTPError(http.StatusTooManyRequests,
 			"Rate limit exceeded. Please slow down your requests.")
 	}
@@ -302,16 +305,16 @@ func shouldSkipRateLimit(endpoint string) bool {
 func GetBannedIPsHandler(limiter *EnhancedRateLimiter) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		banned := limiter.banManager.GetBannedIPs()
-		
+
 		result := make([]map[string]any, len(banned))
 		now := time.Now()
-		
+
 		for i, ban := range banned {
 			remaining := ban.BannedUntil.Sub(now)
 			result[i] = map[string]any{
-				"ip":             ban.IP,
-				"banned_until":   ban.BannedUntil.Format(time.RFC3339),
-				"reason":         ban.Reason,
+				"ip":              ban.IP,
+				"banned_until":    ban.BannedUntil.Format(time.RFC3339),
+				"reason":          ban.Reason,
 				"failed_attempts": ban.Attempts,
 				"time_remaining": map[string]int{
 					"minutes": int(remaining.Minutes()),
@@ -319,9 +322,9 @@ func GetBannedIPsHandler(limiter *EnhancedRateLimiter) echo.HandlerFunc {
 				},
 			}
 		}
-		
+
 		return c.JSON(http.StatusOK, map[string]any{
-			"data": result,
+			"data":  result,
 			"count": len(result),
 		})
 	}
@@ -333,15 +336,15 @@ func UnbanIPHandler(limiter *EnhancedRateLimiter) echo.HandlerFunc {
 		var req struct {
 			IPAddress string `json:"ip_address" validate:"required"`
 		}
-		
+
 		if err := c.Bind(&req); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{
 				"error": "Invalid request body",
 			})
 		}
-		
+
 		limiter.banManager.UnbanIP(req.IPAddress)
-		
+
 		return c.JSON(http.StatusOK, map[string]string{
 			"message": "IP successfully unbanned",
 			"ip":      req.IPAddress,

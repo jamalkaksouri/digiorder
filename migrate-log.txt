@@ -1,0 +1,3 @@
+Running migrations using database URL:
+postgresql://postgres:root@localhost:5432/digiorder_db?sslmode=disable
+1/u complete_schema (343.8989ms)

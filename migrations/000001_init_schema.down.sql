@@ -1,9 +1,0 @@
-DROP TABLE IF EXISTS order_items;
-DROP TABLE IF EXISTS orders;
-DROP TABLE IF EXISTS product_barcodes;
-DROP TABLE IF EXISTS products;
-DROP TABLE IF EXISTS categories;
-DROP TABLE IF EXISTS dosage_forms;
-DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS roles;
-
